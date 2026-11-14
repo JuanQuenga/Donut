@@ -1,0 +1,64 @@
+{
+  "buildCommand": "pnpm build:static",
+  "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/:path((?!privacy(?:/|$)|api/|assets/|\\.well-known/|.*\\.[^/]+$).+)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex" }]
+    },
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    },
+    {
+      "source": "/apple-app-site-association",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    { "source": "/upc-search", "destination": "/", "permanent": true },
+    { "source": "/upc-search/:path*", "destination": "/", "permanent": true },
+    { "source": "/catalog", "destination": "/dashboard", "permanent": true },
+    { "source": "/api-keys", "destination": "/dashboard", "permanent": true },
+    { "source": "/billing", "destination": "/dashboard", "permanent": true },
+    { "source": "/admin", "destination": "/dashboard", "permanent": true }
+  ],
+  "rewrites": [
+    { "source": "/api/shopify/admin/status", "destination": "https://sincere-trout-414.convex.site/api/shopify/admin/status" },
+    { "source": "/api/shopify/admin/yesterday", "destination": "https://sincere-trout-414.convex.site/api/shopify/admin/yesterday" },
+    { "source": "/api/shopify/admin/search", "destination": "https://sincere-trout-414.convex.site/api/shopify/admin/search" },
+    { "source": "/shopify", "destination": "/shopify.html" },
+    { "source": "/shopify/", "destination": "/shopify.html" },
+    { "source": "/robots.txt", "destination": "/robots.txt" },
+    { "source": "/sitemap.xml", "destination": "/sitemap.xml" },
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "destination": "/.well-known/apple-app-site-association"
+    },
+    {
+      "source": "/apple-app-site-association",
+      "destination": "/apple-app-site-association"
+    },
+    { "source": "/app-sign-in", "destination": "/app-sign-in.html" },
+    { "source": "/app-sign-in/", "destination": "/app-sign-in.html" },
+    {
+      "source": "/clip",
+      "destination": "/clip.html"
+    },
+    {
+      "source": "/clip/",
+      "destination": "/clip.html"
+    },
+    { "source": "/((?!api/).*)", "destination": "/app.html" }
+  ]
+}

@@ -1,0 +1,524 @@
+import React from "react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Download,
+  Eye,
+  ImagePlus,
+  LogIn,
+  Scan,
+  ScanLine,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import type {
+  HydratedMobileScannerPhotoResult,
+  MobileScannerScanResult,
+} from "../../domain/mobile-scanner-results";
+import { cn } from "../../lib/utils";
+import { formatPhotoSize, type MobilePhoto } from "./mobile-photo-helpers";
+import {
+  formatRelativeTime,
+  photoFromResult,
+  type TimelineEntry,
+  type TimelineGroup,
+} from "../../domain/mobile-scanner-timeline";
+
+function Bone({ className }: { className?: string }) {
+  return <div className={cn("volt-skeleton", className)} />;
+}
+
+function SkeletonScanCard({ valueWidth }: { valueWidth: string }) {
+  return (
+    <div className="mobile-scanner-result-section min-w-0 overflow-hidden">
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Bone className="h-7 w-7 shrink-0 rounded-full" />
+          <div className="min-w-0 space-y-1.5">
+            <Bone className="h-3 w-24" />
+            <Bone className="h-2 w-14" />
+          </div>
+        </div>
+        <Bone className="h-7 w-7 shrink-0 rounded-full" />
+      </div>
+      <div className="mobile-scanner-inset rounded-lg px-3 py-2">
+        <Bone className="h-3 w-full" />
+        <Bone className={cn("mt-1.5 h-3", valueWidth)} />
+        <Bone className="mt-2.5 h-7 w-16 rounded-full" />
+      </div>
+    </div>
+  );
+}
+
+function SkeletonPhotoCard() {
+  return (
+    <div className="mobile-scanner-result-section min-w-0 overflow-hidden">
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Bone className="h-7 w-7 shrink-0 rounded-full" />
+          <div className="min-w-0 space-y-1.5">
+            <Bone className="h-3 w-20" />
+            <Bone className="h-2 w-16" />
+          </div>
+        </div>
+        <Bone className="h-7 w-7 shrink-0 rounded-full" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {[0, 1, 2, 3].map((cell) => (
+          <Bone key={cell} className="aspect-square w-full rounded-xl" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Shaped like the cards it stands in for — a capture, a photo batch, a capture
+// — so arriving results settle into the same rhythm instead of reflowing the
+// list. The stagger is the same one real items enter with.
+export function LoadingHistory() {
+  const cards = [
+    <SkeletonScanCard key="scan-first" valueWidth="w-4/5" />,
+    <SkeletonPhotoCard key="photos" />,
+    <SkeletonScanCard key="scan-second" valueWidth="w-1/2" />,
+  ];
+  return (
+    <div role="status" aria-label="Loading results" className="space-y-3">
+      {cards.map((card, index) => (
+        <div
+          key={card.key}
+          className="volt-item-enter"
+          style={{ animationDelay: `${index * 70}ms` }}
+        >
+          {card}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Captures follow the account, not a pairing, so the only thing an empty
+// timeline can be missing is a signed-in account on this browser.
+export function EmptyHistory({
+  signedOut,
+  onSignIn,
+}: {
+  signedOut?: boolean;
+  onSignIn?: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="mobile-scanner-card sidepanel-empty-history flex flex-col items-center border-dashed px-4 py-9 text-center">
+        <div className="mobile-scanner-icon mb-3 flex h-12 w-12 items-center justify-center rounded-full text-stone-400 dark:text-stone-500">
+          {signedOut ? <LogIn className="h-5 w-5" /> : <Scan className="h-5 w-5" />}
+        </div>
+        <p className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+          {signedOut ? "Sign in to see your captures" : "No results yet"}
+        </p>
+        <p className="mt-1 max-w-[260px] text-xs text-stone-500 dark:text-stone-400">
+          {signedOut
+            ? "Sign in to Donut here and captures from your phone on the same account appear automatically."
+            : "Text captures, barcodes, and fully received photos appear in this timeline."}
+        </p>
+      </div>
+      {signedOut && onSignIn ? (
+        <button
+          type="button"
+          onClick={onSignIn}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-500 active:bg-emerald-700"
+        >
+          <LogIn className="h-4 w-4" />
+          Sign in to Donut
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export function CaptureBatchCard({
+  group,
+  now,
+  removing,
+  collapsed,
+  removingIds,
+  selectedPhotoIds,
+  onToggleCollapse,
+  onDeleteBatch,
+  onDeleteEntry,
+  onCopyScan,
+  onCopyPhoto,
+  onDownloadPhoto,
+  onPreviewPhoto,
+  onSendPhoto,
+  onDragStart,
+  onBatchDragStart,
+  onHover,
+  onToggleSelection,
+}: {
+  group: Extract<TimelineGroup, { type: "capture" }>;
+  now: number;
+  removing: boolean;
+  collapsed: boolean;
+  removingIds: Set<string>;
+  selectedPhotoIds: Set<string>;
+  onToggleCollapse: () => void;
+  onDeleteBatch: () => void;
+  onDeleteEntry: (entry: TimelineEntry) => void;
+  onCopyScan: (scan: MobileScannerScanResult) => void;
+  onCopyPhoto: (photo: MobilePhoto) => void;
+  onDownloadPhoto: (photo: MobilePhoto) => void;
+  onPreviewPhoto: (photo: MobilePhoto) => void;
+  onSendPhoto: (photo: MobilePhoto) => void;
+  onDragStart: (event: React.DragEvent, photo: MobilePhoto) => void;
+  onBatchDragStart: (event: React.DragEvent) => void;
+  onHover: () => void;
+  onToggleSelection: (photoId: string, shiftKey: boolean) => void;
+}) {
+  const photos = group.entries.filter(isPhotoEntry);
+  const scans = group.entries.filter(isScanEntry);
+  const photoOnly = scans.length === 0;
+  const count = group.entries.length;
+  const title = photoOnly
+    ? count === 1
+      ? "Photo batch"
+      : `${count} photo batch`
+    : `${count} capture${count === 1 ? "" : "s"}`;
+  return (
+    <div className={cn("mobile-scanner-result-section min-w-0 overflow-hidden", removing && "volt-item-exit")}>
+      <div className="mb-2 flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-full", photoOnly ? "bg-orange-100/80 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300" : "bg-green-100/80 text-green-700 dark:bg-green-500/15 dark:text-green-300")}>
+            {photoOnly ? <ImagePlus className="h-3.5 w-3.5" /> : <ScanLine className="h-3.5 w-3.5" />}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-xs font-bold text-stone-900 dark:text-stone-100">
+              {title}
+            </div>
+            <div className="truncate text-[10px] font-medium text-stone-500 dark:text-stone-400">
+              {formatRelativeTime(group.endAt, now)}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          {photos.length > 0 ? (
+            <button type="button" onClick={onToggleCollapse} className="mobile-scanner-mini-action inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold transition" aria-label={collapsed ? "Expand photo batch" : "Collapse photo batch"}>
+              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", collapsed && "-rotate-90")} />
+              {collapsed ? (photos.length > 1 ? `+${photos.length - 1}` : "Show") : "Hide"}
+            </button>
+          ) : null}
+          <button type="button" onClick={onDeleteBatch} className="flex h-7 w-7 items-center justify-center rounded-full text-stone-500 transition hover:bg-stone-200 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-700 dark:hover:text-stone-50" aria-label={photoOnly ? "Delete photo batch" : "Delete capture batch"}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {photos.length > 0 && collapsed ? (
+          <CollapsedPhotoBatchPreview
+            entries={photos.slice(0, 4)}
+            totalCount={photos.length}
+            selectedPhotoIds={selectedPhotoIds}
+            removingIds={removingIds}
+            onDragStart={onBatchDragStart}
+            onHover={onHover}
+            onToggleCollapse={onToggleCollapse}
+          />
+        ) : photos.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2">
+            {photos.map((entry) => {
+              const photo = photoFromResult(entry);
+              return <PhotoTile key={entry.id} photo={photo} selected={selectedPhotoIds.has(entry.id)} exiting={removingIds.has(entry.id)} onDelete={() => onDeleteEntry(entry)} onCopy={() => onCopyPhoto(photo)} onDownload={() => onDownloadPhoto(photo)} onPreview={() => onPreviewPhoto(photo)} onSend={() => onSendPhoto(photo)} onDragStart={(event) => onDragStart(event, photo)} onHover={onHover} onToggleSelection={(shiftKey) => onToggleSelection(entry.id, shiftKey)} />;
+            })}
+          </div>
+        ) : null}
+        {scans.map((entry) => (
+          <ScanResultTile key={entry.id} scan={entry} removing={removingIds.has(entry.id)} onDelete={() => onDeleteEntry(entry)} onCopy={() => onCopyScan(entry)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function isPhotoEntry(entry: TimelineEntry): entry is HydratedMobileScannerPhotoResult {
+  return entry.type === "photo";
+}
+
+function isScanEntry(entry: TimelineEntry): entry is MobileScannerScanResult {
+  return entry.type === "scan";
+}
+
+function ScanResultTile({
+  scan,
+  removing,
+  onCopy,
+  onDelete,
+}: {
+  scan: MobileScannerScanResult;
+  removing: boolean;
+  onCopy: () => void;
+  onDelete: () => void;
+}) {
+  const isText = scan.kind === "text";
+  const kindLabel = scan.format === "dictation" ? "Audio" : isText ? "Text" : "Barcode";
+  return (
+    <div className={cn("mobile-scanner-inset min-w-0 overflow-hidden rounded-lg px-3 py-2", removing && "volt-item-exit")}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+            {kindLabel}
+          </div>
+          <div className={cn("text-[13px] font-semibold leading-snug text-stone-950 dark:text-stone-50", isText ? "line-clamp-4 break-words" : "break-all font-mono")}>
+            {scan.value}
+          </div>
+        </div>
+        <button type="button" onClick={onDelete} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-stone-500 transition hover:bg-stone-200 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-700 dark:hover:text-stone-50" aria-label="Delete result">
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+      <button type="button" onClick={onCopy} className="mobile-scanner-mini-action mt-2 inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[11px] font-bold transition">
+        <Copy className="h-3 w-3" />
+        Copy
+      </button>
+    </div>
+  );
+}
+
+function CollapsedPhotoBatchPreview({
+  entries,
+  totalCount,
+  selectedPhotoIds,
+  removingIds,
+  onDragStart,
+  onHover,
+  onToggleCollapse,
+}: {
+  entries: HydratedMobileScannerPhotoResult[];
+  totalCount: number;
+  selectedPhotoIds: Set<string>;
+  removingIds: Set<string>;
+  onDragStart: (event: React.DragEvent) => void;
+  onHover: () => void;
+  onToggleCollapse: () => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onMouseEnter={onHover}
+      onPointerDown={onHover}
+      className="mobile-scanner-inset group cursor-grab rounded-lg p-1 active:cursor-grabbing"
+      aria-label={`Drag ${totalCount} photo batch`}
+    >
+      <div className="grid grid-cols-4 gap-1">
+        {entries.map((entry, index) => {
+          const photo = photoFromResult(entry);
+          const hiddenCount = totalCount - entries.length;
+          const showOverflow = index === entries.length - 1 && hiddenCount > 0;
+          return (
+            <button
+              key={entry.id}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggleCollapse();
+              }}
+              className={cn(
+                "relative aspect-square min-w-0 overflow-hidden rounded-md bg-stone-100 ring-1 ring-inset transition dark:bg-stone-900/80",
+                selectedPhotoIds.has(entry.id) ? "ring-green-500 dark:ring-green-300" : "ring-stone-200/80 dark:ring-stone-700",
+                removingIds.has(entry.id) && "volt-item-exit",
+              )}
+              aria-label="Expand photo batch"
+            >
+              {photo.dataUrl ? (
+                <img src={photo.dataUrl} alt={photo.name} className="h-full w-full object-cover" draggable={false} />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-stone-500 dark:text-stone-400">
+                  <Download className="h-4 w-4" />
+                </div>
+              )}
+              {showOverflow ? (
+                <span className="absolute inset-0 flex items-center justify-center bg-stone-950/62 text-xs font-bold text-white">
+                  +{hiddenCount}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      <div className="pointer-events-none mt-1.5 flex items-center justify-between px-1 text-[10px] font-semibold text-stone-500 dark:text-stone-400">
+        <span>Drag batch</span>
+        <span>{totalCount} photos</span>
+      </div>
+    </div>
+  );
+}
+
+function PhotoTile({
+  photo,
+  selected,
+  exiting,
+  onDelete,
+  onCopy,
+  onDownload,
+  onPreview,
+  onSend,
+  onDragStart,
+  onHover,
+  onToggleSelection,
+}: {
+  photo: MobilePhoto;
+  selected: boolean;
+  exiting: boolean;
+  onDelete: () => void;
+  onCopy: () => void;
+  onDownload: () => void;
+  onPreview: () => void;
+  onSend: () => void;
+  onDragStart: (event: React.DragEvent) => void;
+  onHover: () => void;
+  onToggleSelection: (shiftKey: boolean) => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onMouseEnter={onHover}
+      onPointerDown={onHover}
+      onClick={(event) => onToggleSelection(event.shiftKey)}
+      className={cn(
+        "group relative aspect-square overflow-hidden rounded-lg bg-stone-50 ring-1 transition dark:bg-stone-800/70",
+        selected ? "ring-2 ring-green-500 dark:ring-green-300" : "ring-stone-200/70 dark:ring-stone-700/70",
+        exiting && "volt-item-exit",
+        "cursor-grab active:cursor-grabbing",
+      )}
+    >
+      <span className={cn("absolute left-1 top-1 z-10 flex h-6 w-6 items-center justify-center rounded-full border text-white shadow-sm transition", selected ? "border-green-500 bg-green-500" : "border-white/80 bg-stone-950/30 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100")} aria-hidden="true">
+        {selected ? <Check className="h-3.5 w-3.5" /> : null}
+      </span>
+      {photo.dataUrl ? (
+        <img src={photo.dataUrl} alt={photo.name} className="pointer-events-none h-full w-full object-cover" draggable={false} />
+      ) : (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-stone-100 px-3 text-center text-stone-500 dark:bg-stone-900 dark:text-stone-300">
+          <Download className="h-7 w-7" />
+          <span className="text-[11px] font-semibold">Saved to Downloads</span>
+        </div>
+      )}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-linear-to-t from-stone-900/85 via-stone-900/35 to-transparent px-2 pb-1.5 pt-6 text-[10px] text-white">
+        <div className="truncate font-semibold">{photo.name}</div>
+        <div className="truncate text-white/75">
+          {[photo.width && photo.height ? `${photo.width}x${photo.height}` : "", formatPhotoSize(photo.size)].filter(Boolean).join(" · ")}
+        </div>
+      </div>
+      <div className="absolute right-1 top-1 flex flex-col gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
+        <PhotoActionButton onClick={onPreview} label="Preview photo">
+          <Eye className="h-3 w-3" />
+        </PhotoActionButton>
+        <PhotoActionButton onClick={onSend} label="Send to active tab">
+          <Upload className="h-3 w-3" />
+        </PhotoActionButton>
+        <PhotoActionButton onClick={onCopy} label="Copy photo">
+          <Copy className="h-3 w-3" />
+        </PhotoActionButton>
+        <PhotoActionButton onClick={onDownload} label="Download photo">
+          <Download className="h-3 w-3" />
+        </PhotoActionButton>
+        <PhotoActionButton onClick={onDelete} label="Delete photo" danger>
+          <X className="h-3 w-3" />
+        </PhotoActionButton>
+      </div>
+    </div>
+  );
+}
+
+function PhotoActionButton({
+  onClick,
+  label,
+  children,
+  danger,
+}: {
+  onClick: () => void;
+  label: string;
+  children: React.ReactNode;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      aria-label={label}
+      className={cn(
+        "flex h-6 w-6 items-center justify-center rounded-full backdrop-blur-md transition",
+        danger ? "bg-red-500/85 text-white hover:bg-red-500" : "bg-white/85 text-stone-900 hover:bg-white",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function UndoDeleteToast({
+  label,
+  onUndo,
+}: {
+  label: string;
+  onUndo: () => void;
+}) {
+  return (
+    <div className="mobile-scanner-toast absolute inset-x-3 bottom-3 z-20 flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-xs font-semibold shadow-lg">
+      <span className="truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onUndo}
+        className="rounded-md bg-white px-2 py-1 text-xs font-bold text-stone-950"
+      >
+        Undo
+      </button>
+    </div>
+  );
+}
+
+export function PhotoPreviewDialog({
+  photo,
+  onClose,
+  onCopy,
+  onDownload,
+}: {
+  photo: MobilePhoto;
+  onClose: () => void;
+  onCopy: () => void;
+  onDownload: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col bg-stone-950/92 p-3 text-white backdrop-blur-md">
+      <div className="mb-3 flex flex-none items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-bold">{photo.name}</div>
+          <div className="truncate text-xs text-white/60">
+            {[photo.width && photo.height ? `${photo.width}x${photo.height}` : "", formatPhotoSize(photo.size)].filter(Boolean).join(" · ")}
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button type="button" onClick={onCopy} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20" aria-label="Copy photo">
+            <Copy className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={onDownload} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20" aria-label="Download photo">
+            <Download className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-stone-950 transition hover:bg-stone-200" aria-label="Close preview">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg bg-black">
+        {photo.dataUrl ? (
+          <img src={photo.dataUrl} alt={photo.name} className="max-h-full max-w-full object-contain" />
+        ) : (
+          <div className="text-sm font-semibold text-white/70">Preview unavailable</div>
+        )}
+      </div>
+    </div>
+  );
+}

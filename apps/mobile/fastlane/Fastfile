@@ -1,0 +1,690 @@
+require "json"
+require "net/http"
+require "shellwords"
+
+default_platform(:ios)
+opt_out_usage
+
+WORKSPACE = "ios/Volt.xcworkspace"
+APP_SCHEME = "Volt"
+SCREENSHOT_SCHEME = "VoltScreenshots"
+APP_IDENTIFIER = ENV.fetch("VOLT_IOS_BUNDLE_ID", "com.volt.mobile")
+APP_CLIP_IDENTIFIER = ENV.fetch("VOLT_IOS_APP_CLIP_BUNDLE_ID", "#{APP_IDENTIFIER}.Clip")
+TEAM_ID = ENV.fetch("VOLT_APPLE_TEAM_ID", "GB5SPLUARQ")
+APP_STORE_CONNECT_ISSUER_ID = ENV.fetch("APP_STORE_CONNECT_ISSUER_ID", "69a6de87-2df2-47e3-e053-5b8c7c11a4d1")
+BUILD_OUTPUT_DIRECTORY = "build/fastlane"
+SCREENSHOT_OUTPUT_DIRECTORY = "fastlane/screenshots"
+FRAMED_SCREENSHOT_OUTPUT_DIRECTORY = "build/framed-screenshots"
+APP_STORE_ARTWORK_OUTPUT_DIRECTORY = "build/app-store-artwork"
+ACCEPTED_IPHONE_SCREENSHOT_SIZES = [
+  [1260, 2736],
+  [2736, 1260],
+  [1290, 2796],
+  [2796, 1290],
+  [1320, 2868],
+  [2868, 1320],
+  [1284, 2778],
+  [2778, 1284],
+  [1242, 2688],
+  [2688, 1242],
+  [1179, 2556],
+  [2556, 1179],
+  [1206, 2622],
+  [2622, 1206],
+  [1170, 2532],
+  [2532, 1170],
+  [1125, 2436],
+  [2436, 1125],
+  [1080, 2340],
+  [2340, 1080],
+  [1242, 2208],
+  [2208, 1242],
+  [750, 1334],
+  [1334, 750],
+  [640, 1096],
+  [640, 1136],
+  [1136, 600],
+  [1136, 640],
+  [640, 920],
+  [640, 960],
+  [960, 600],
+  [960, 640]
+].freeze
+
+def truthy_env?(name, default = false)
+  value = ENV[name]
+  return default if value.nil? || value.empty?
+
+  %w[1 true yes on].include?(value.downcase)
+end
+
+def app_store_connect_api_key_from_env
+  missing = []
+  missing << "APP_STORE_CONNECT_API_KEY_ID" unless ENV["APP_STORE_CONNECT_API_KEY_ID"]
+
+  key_path = ENV["APP_STORE_CONNECT_API_KEY_PATH"]
+  key_content = ENV["APP_STORE_CONNECT_API_KEY_CONTENT"]
+  missing << "APP_STORE_CONNECT_API_KEY_PATH or APP_STORE_CONNECT_API_KEY_CONTENT" unless key_path || key_content
+
+  UI.user_error!("Missing App Store Connect API key environment: #{missing.join(', ')}") unless missing.empty?
+
+  options = {
+    key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
+    duration: ENV.fetch("APP_STORE_CONNECT_API_KEY_DURATION", "1200").to_i,
+    issuer_id: APP_STORE_CONNECT_ISSUER_ID
+  }
+
+  if key_path
+    options[:key_filepath] = key_path
+  else
+    options[:key_content] = key_content
+    options[:is_key_content_base64] = truthy_env?("APP_STORE_CONNECT_API_KEY_CONTENT_BASE64")
+  end
+
+  app_store_connect_api_key(options)
+end
+
+def xcode_auth_xcargs_from_env
+  return nil unless ENV["APP_STORE_CONNECT_API_KEY_PATH"] && ENV["APP_STORE_CONNECT_API_KEY_ID"] && ENV["APP_STORE_CONNECT_ISSUER_ID"]
+
+  [
+    "-allowProvisioningUpdates",
+    "-authenticationKeyPath #{Shellwords.escape(ENV.fetch('APP_STORE_CONNECT_API_KEY_PATH'))}",
+    "-authenticationKeyID #{Shellwords.escape(ENV.fetch('APP_STORE_CONNECT_API_KEY_ID'))}",
+    "-authenticationKeyIssuerID #{Shellwords.escape(ENV.fetch('APP_STORE_CONNECT_ISSUER_ID'))}"
+  ].join(" ")
+end
+
+def clerk_release_xcargs_from_env
+  publishable_key = ENV["VOLT_CLERK_PUBLISHABLE_KEY"].to_s.strip
+  frontend_api_domain = ENV["VOLT_CLERK_FRONTEND_API_DOMAIN"].to_s.strip
+  UI.user_error!("VOLT_CLERK_PUBLISHABLE_KEY must be a Clerk production publishable key") unless publishable_key.start_with?("pk_live_")
+  UI.user_error!("VOLT_CLERK_FRONTEND_API_DOMAIN must be the Clerk production Frontend API domain") if frontend_api_domain.empty? || frontend_api_domain == "REPLACE_ME"
+
+  [
+    "VOLT_CLERK_PUBLISHABLE_KEY=#{Shellwords.escape(publishable_key)}",
+    "VOLT_CLERK_FRONTEND_API_DOMAIN=#{Shellwords.escape(frontend_api_domain)}"
+  ].join(" ")
+end
+
+def build_app_store_ipa
+  xcode_auth_xcargs = xcode_auth_xcargs_from_env
+  clerk_release_xcargs = clerk_release_xcargs_from_env
+  app_root = File.expand_path("..", __dir__)
+  workspace_path = File.join(app_root, WORKSPACE)
+  output_directory = File.join(app_root, BUILD_OUTPUT_DIRECTORY)
+  archive_path = File.join(output_directory, "Volt.xcarchive")
+  export_path = File.join(output_directory, "export")
+  export_options_path = File.join(output_directory, "ExportOptions.plist")
+  ipa_path = File.join(export_path, "Volt.ipa")
+
+  FileUtils.rm_rf(archive_path)
+  FileUtils.rm_rf(export_path)
+  FileUtils.mkdir_p(output_directory)
+
+  File.write(
+    export_options_path,
+    <<~PLIST
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+      <plist version="1.0">
+      <dict>
+        <key>destination</key>
+        <string>export</string>
+        <key>manageAppVersionAndBuildNumber</key>
+        <false/>
+        <key>method</key>
+        <string>app-store-connect</string>
+        <key>signingStyle</key>
+        <string>automatic</string>
+        <key>teamID</key>
+        <string>#{TEAM_ID}</string>
+        <key>uploadSymbols</key>
+        <true/>
+      </dict>
+      </plist>
+    PLIST
+  )
+
+  archive_command = [
+    "xcodebuild",
+    "-workspace", Shellwords.escape(workspace_path),
+    "-scheme", Shellwords.escape(APP_SCHEME),
+    "-configuration", "Release",
+    "-destination", Shellwords.escape("generic/platform=iOS"),
+    "-archivePath", Shellwords.escape(archive_path),
+    "clean", "archive",
+    clerk_release_xcargs,
+    xcode_auth_xcargs
+  ].compact.join(" ")
+  sh(archive_command)
+
+  export_command = [
+    "xcodebuild",
+    "-exportArchive",
+    "-archivePath", Shellwords.escape(archive_path),
+    "-exportPath", Shellwords.escape(export_path),
+    "-exportOptionsPlist", Shellwords.escape(export_options_path),
+    xcode_auth_xcargs
+  ].compact.join(" ")
+  sh(export_command)
+
+  UI.user_error!("Expected IPA at #{ipa_path}") unless File.exist?(ipa_path)
+
+  ipa_path
+end
+
+def project_marketing_version
+  project_path = File.expand_path("ios/Volt.xcodeproj/project.pbxproj", File.expand_path("..", __dir__))
+  project_source = File.read(project_path)
+  match = project_source.match(/MARKETING_VERSION = ([^;]+);/)
+  UI.user_error!("Could not read MARKETING_VERSION from #{project_path}") unless match
+
+  match[1]
+end
+
+def next_testflight_build_number(api_key:, app_version:)
+  latest_build_number = latest_testflight_build_number(
+    api_key: api_key,
+    app_identifier: APP_IDENTIFIER,
+    version: app_version,
+    initial_build_number: 45
+  )
+
+  latest_build_number.to_i + 1
+end
+
+def apply_project_build_number(build_number)
+  increment_build_number(
+    xcodeproj: "ios/Volt.xcodeproj",
+    build_number: build_number.to_s,
+    skip_info_plist: true
+  )
+end
+
+def project_build_number
+  project_path = File.expand_path("ios/Volt.xcodeproj/project.pbxproj", File.expand_path("..", __dir__))
+  project_source = File.read(project_path)
+  match = project_source.match(/CURRENT_PROJECT_VERSION = ([^;]+);/)
+  UI.user_error!("Could not read CURRENT_PROJECT_VERSION from #{project_path}") unless match
+
+  match[1]
+end
+
+# Donut gates everything behind a Clerk sign-in, so App Review cannot get past the
+# first screen without an account. Google OAuth and email one-time codes are both
+# unusable for a reviewer, so the production Clerk instance also accepts a
+# password as a first factor purely for this demo account. Supply it here or the
+# reviewer stops at the sign-in screen.
+def app_review_demo_account_from_env
+  demo_user = ENV["APP_REVIEW_DEMO_USER"].to_s.strip
+  demo_password = ENV["APP_REVIEW_DEMO_PASSWORD"].to_s.strip
+  return nil if demo_user.empty? && demo_password.empty?
+
+  if demo_user.empty? || demo_password.empty?
+    UI.user_error!("APP_REVIEW_DEMO_USER and APP_REVIEW_DEMO_PASSWORD must be set together")
+  end
+
+  [demo_user, demo_password]
+end
+
+# deliver and upload_to_testflight spell the same two fields differently, and each
+# silently drops keys it does not recognise — passing the wrong pair means the
+# submission goes out with no demo account and the reviewer is stuck at sign-in.
+def deliver_demo_account_from_env
+  account = app_review_demo_account_from_env
+  return {} if account.nil?
+
+  { demo_user: account[0], demo_password: account[1] }
+end
+
+def testflight_demo_account_from_env
+  account = app_review_demo_account_from_env
+  return { demo_account_required: false } if account.nil?
+
+  {
+    demo_account_required: true,
+    demo_account_name: account[0],
+    demo_account_password: account[1]
+  }
+end
+
+# deliver's review_information always writes demo_account_required, and sets it to
+# false whenever the demo credentials are absent - even when it is only uploading
+# review notes. Donut gates every screen behind a Clerk sign-in, so that silently
+# tells App Review no account is needed and the reviewer stops at the first screen
+# with the stored credentials hidden from them. Fail loudly instead.
+def require_demo_account_for_review_information!
+  return unless app_review_demo_account_from_env.nil?
+
+  UI.user_error!(
+    "APP_REVIEW_DEMO_USER and APP_REVIEW_DEMO_PASSWORD must be set before uploading " \
+    "review information. Without them deliver clears demoAccountRequired and App " \
+    "Review is stranded at the Clerk sign-in screen."
+  )
+end
+
+def upload_app_store_release_notes(api_key:, app_version:, build_number:, release_notes:, review_notes:, submit_for_review:, automatic_release: false)
+  return if release_notes.to_s.strip.empty? && review_notes.to_s.strip.empty? && !submit_for_review
+
+  require_demo_account_for_review_information!
+  app_review_information = deliver_demo_account_from_env
+  app_review_information[:notes] = review_notes if review_notes.to_s.strip.length.positive?
+  localized_release_notes = {}
+  localized_release_notes["en-US"] = release_notes if release_notes.to_s.strip.length.positive?
+
+  deliver_options = {
+    api_key: api_key,
+    app_identifier: APP_IDENTIFIER,
+    app_version: app_version,
+    metadata_path: File.expand_path("metadata", __dir__),
+    build_number: submit_for_review ? build_number.to_s : nil,
+    skip_binary_upload: true,
+    skip_screenshots: true,
+    skip_app_version_update: false,
+    release_notes: localized_release_notes,
+    app_review_information: app_review_information,
+    automatic_release: automatic_release,
+    submission_information: {
+      export_compliance_uses_encryption: false
+    },
+    run_precheck_before_submit: false,
+    force: true
+  }
+
+  # The first pass creates the App Store version, which the App Clip experience
+  # must be attached to before Apple accepts the submission.
+  deliver(**deliver_options, skip_metadata: false, submit_for_review: false)
+  return unless submit_for_review
+
+  ensure_app_clip_default_experience!(api_key: api_key, app_version: app_version)
+  deliver(**deliver_options, skip_metadata: true, submit_for_review: true)
+end
+
+def app_store_connect_request(token, method, path, body = nil)
+  token.refresh! if token.expired?
+  uri = URI("https://api.appstoreconnect.apple.com#{path}")
+  request = Net::HTTP.const_get(method.capitalize).new(uri)
+  request["Authorization"] = "Bearer #{token.text}"
+  request["Content-Type"] = "application/json"
+  request.body = JSON.generate(body) if body
+  response = Net::HTTP.start(uri.host, uri.port, use_ssl: true) { |http| http.request(request) }
+  UI.user_error!("App Store Connect #{method} #{uri.path} failed (#{response.code}): #{response.body}") unless response.is_a?(Net::HTTPSuccess)
+
+  response.body.to_s.empty? ? {} : JSON.parse(response.body)
+end
+
+# Versions created through the API do not inherit the App Clip default experience
+# the way the App Store Connect website does, and Apple rejects the submission
+# without one. Copy it, including the header image, from the newest version that has it.
+def ensure_app_clip_default_experience!(api_key:, app_version:)
+  token = Spaceship::ConnectAPI::Token.from(hash: api_key)
+  app = app_store_connect_request(token, :get, "/v1/apps?filter[bundleId]=#{APP_IDENTIFIER}")["data"].first
+  UI.user_error!("No App Store Connect app found for #{APP_IDENTIFIER}") unless app
+
+  versions = app_store_connect_request(
+    token,
+    :get,
+    "/v1/apps/#{app['id']}/appStoreVersions?filter[platform]=IOS&include=appClipDefaultExperience&limit=20"
+  )["data"].sort_by { |version| version.dig("attributes", "createdDate").to_s }.reverse
+  experience_id = ->(version) { version.dig("relationships", "appClipDefaultExperience", "data", "id") }
+
+  target = versions.find { |version| version.dig("attributes", "versionString") == app_version }
+  UI.user_error!("App Store version #{app_version} does not exist") unless target
+  return UI.message("App Clip default experience already attached to #{app_version}") if experience_id.call(target)
+
+  template = versions.find { |version| version != target && experience_id.call(version) }
+  UI.user_error!("No earlier App Store version has an App Clip default experience to copy") unless template
+
+  template_experience = app_store_connect_request(token, :get, "/v1/appClipDefaultExperiences/#{experience_id.call(template)}?include=appClip")["data"]
+  app_store_connect_request(
+    token,
+    :post,
+    "/v1/appClipDefaultExperiences",
+    {
+      data: {
+        type: "appClipDefaultExperiences",
+        attributes: { action: template_experience.dig("attributes", "action") },
+        relationships: {
+          appClip: { data: template_experience.dig("relationships", "appClip", "data") },
+          releaseWithAppStoreVersion: { data: { type: "appStoreVersions", id: target["id"] } },
+          appClipDefaultExperienceTemplate: { data: { type: "appClipDefaultExperiences", id: template_experience["id"] } }
+        }
+      }
+    }
+  )
+  UI.success("Copied the App Clip default experience from #{template.dig('attributes', 'versionString')} to #{app_version}")
+end
+
+def write_screenshot_report(output_directory)
+  output_path = File.expand_path(output_directory, File.expand_path("..", __dir__))
+  screenshots = Dir.glob(File.join(output_path, "**", "*.png")).sort
+  rows = screenshots.map do |path|
+    relative_path = path.delete_prefix("#{output_path}/")
+    escaped_path = relative_path.gsub(" ", "%20")
+    "<figure><a href=\"#{escaped_path}\"><img src=\"#{escaped_path}\" alt=\"#{File.basename(path)}\"></a><figcaption>#{relative_path}</figcaption></figure>"
+  end
+
+  FileUtils.mkdir_p(output_path)
+  File.write(
+    File.join(output_path, "screenshots.html"),
+    <<~HTML
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Donut screenshots</title>
+          <style>
+            body { margin: 0; padding: 32px; background: #f6f7f8; color: #171717; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+            h1 { margin: 0 0 24px; font-size: 28px; font-weight: 700; }
+            .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; align-items: start; }
+            figure { margin: 0; padding: 16px; background: white; border: 1px solid #ddd; border-radius: 8px; }
+            img { display: block; width: 100%; height: auto; border: 1px solid #eee; }
+            figcaption { margin-top: 12px; color: #555; font-size: 13px; overflow-wrap: anywhere; }
+          </style>
+        </head>
+        <body>
+          <h1>Donut screenshots</h1>
+          <main class="grid">
+            #{rows.join("\n        ")}
+          </main>
+        </body>
+      </html>
+    HTML
+  )
+end
+
+def validate_iphone_screenshots_for_upload(output_directory)
+  require "fastimage"
+
+  output_path = File.expand_path(output_directory, File.expand_path("..", __dir__))
+  screenshots = Dir.glob(File.join(output_path, "**", "*.png")).sort
+  UI.user_error!("No screenshots found in #{output_path}") if screenshots.empty?
+
+  invalid_screenshots = []
+  screenshots.each do |path|
+    size = FastImage.size(path)
+    unless size && ACCEPTED_IPHONE_SCREENSHOT_SIZES.include?(size)
+      relative_path = path.delete_prefix("#{output_path}/")
+      invalid_screenshots << "#{relative_path} (#{size ? size.join(' x ') : 'unknown size'})"
+    end
+  end
+
+  return if invalid_screenshots.empty?
+
+  UI.user_error!(
+    [
+      "Only App Store Connect iPhone screenshot dimensions are allowed in #{output_path}.",
+      "Remove framed or resized screenshots before upload.",
+      invalid_screenshots.join("\n")
+    ].join("\n")
+  )
+end
+
+def register_frameit_iphone_17_pro_max
+  require "frameit"
+
+  return if Frameit::Devices.const_defined?(:IPHONE_17_PRO_MAX)
+
+  Frameit::Devices.const_set(
+    :IPHONE_17_PRO_MAX,
+    Frameit::Device.new(
+      "iphone17-pro-max",
+      "Apple iPhone 17 Pro Max",
+      14,
+      [[1320, 2868], [2868, 1320]],
+      460,
+      Frameit::Color::SILVER,
+      Frameit::Platform::IOS
+    )
+  )
+end
+
+def prepare_rounded_frameit_sources(source_directory, work_directory)
+  require "fastimage"
+
+  FileUtils.rm_rf(work_directory)
+  FileUtils.mkdir_p(work_directory)
+
+  masks = {}
+  screenshot_paths = Dir.glob(File.join(source_directory, "**", "*.png"))
+    .reject { |path| path.include?("_framed.png") }
+    .sort
+
+  screenshot_paths.each do |source_path|
+    relative_path = source_path.delete_prefix("#{source_directory}/")
+    destination_path = File.join(work_directory, relative_path)
+    FileUtils.mkdir_p(File.dirname(destination_path))
+    FileUtils.cp(source_path, destination_path)
+
+    size = FastImage.size(destination_path)
+    UI.user_error!("Could not read screenshot dimensions for #{destination_path}") unless size
+
+    width, height = size
+    radius = 116
+    mask_key = "#{width}x#{height}"
+    masks[mask_key] ||= begin
+      mask_path = File.join(work_directory, "device_frames", "mask-#{mask_key}.png")
+      FileUtils.mkdir_p(File.dirname(mask_path))
+      round_rectangle = "roundrectangle 0,0 #{width - 1},#{height - 1} #{radius},#{radius}"
+      sh(
+        [
+          "magick",
+          "-size", mask_key,
+          "xc:none",
+          "-fill", "white",
+          "-draw", Shellwords.escape(round_rectangle),
+          Shellwords.escape(mask_path)
+        ].join(" ")
+      )
+      mask_path
+    end
+
+    masked_path = "#{destination_path}.masked.png"
+    sh(
+      [
+        "magick",
+        Shellwords.escape(destination_path),
+        "-alpha", "set",
+        Shellwords.escape(masks.fetch(mask_key)),
+        "-compose", "CopyOpacity",
+        "-composite",
+        Shellwords.escape(masked_path)
+      ].join(" ")
+    )
+    FileUtils.mv(masked_path, destination_path)
+  end
+end
+
+def flatten_framed_screenshot(path)
+  flattened_path = "#{path}.flattened.png"
+  sh(
+    [
+      "magick",
+      Shellwords.escape(path),
+      "-background", "white",
+      "-alpha", "remove",
+      "-alpha", "off",
+      Shellwords.escape(flattened_path)
+    ].join(" ")
+  )
+  FileUtils.mv(flattened_path, path)
+end
+
+def transparent_framed_path(path)
+  path.sub(/_framed\.png\z/, "_framed_transparent.png")
+end
+
+platform :ios do
+  desc "Refresh the App Clip App Store provisioning profile"
+  lane :refresh_app_clip_profile do
+    api_key = app_store_connect_api_key_from_env
+
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: APP_CLIP_IDENTIFIER,
+      force: true,
+      team_id: TEAM_ID,
+      output_path: BUILD_OUTPUT_DIRECTORY,
+      filename: "VoltClip_AppStore.mobileprovision"
+    )
+  end
+
+  desc "Validate the local iOS app with the repo-preferred simulator build command"
+  lane :build do
+    sh("pnpm --filter @volt/mobile build:ios")
+  end
+
+  desc "Create a signed App Store IPA with fastlane build_app/gym"
+  lane :archive do
+    build_app_store_ipa
+  end
+
+  desc "Build an App Store IPA and upload it to TestFlight"
+  lane :beta do |options|
+    api_key = app_store_connect_api_key_from_env
+    app_version = options[:app_version] || ENV["VOLT_IOS_APP_VERSION"] || project_marketing_version
+    build_number = options[:build_number] || ENV["VOLT_IOS_BUILD_NUMBER"] || next_testflight_build_number(api_key: api_key, app_version: app_version)
+    apply_project_build_number(build_number)
+
+    ipa_path = build_app_store_ipa
+    testflight_changelog = options[:changelog] || ENV["TESTFLIGHT_CHANGELOG"]
+    app_store_release_notes = options[:release_notes] || ENV["APP_STORE_RELEASE_NOTES"] || testflight_changelog
+    app_review_notes = options[:review_notes] || ENV["APP_REVIEW_NOTES"]
+    submit_for_review = truthy_env?("SUBMIT_FOR_REVIEW")
+    skip_waiting_for_build_processing = truthy_env?("FASTLANE_SKIP_WAITING_FOR_BUILD_PROCESSING", true) && !submit_for_review
+
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      ipa: ipa_path,
+      changelog: testflight_changelog,
+      beta_app_review_info: {
+        notes: app_review_notes,
+        **testflight_demo_account_from_env
+      },
+      skip_waiting_for_build_processing: skip_waiting_for_build_processing
+    )
+
+    upload_app_store_release_notes(
+      api_key: api_key,
+      app_version: app_version,
+      build_number: build_number,
+      release_notes: app_store_release_notes,
+      review_notes: app_review_notes,
+      submit_for_review: submit_for_review,
+      automatic_release: truthy_env?("APP_STORE_AUTOMATIC_RELEASE")
+    )
+  end
+
+  desc "Attach an already-uploaded build to the App Store version and submit for review"
+  lane :submit do |options|
+    api_key = app_store_connect_api_key_from_env
+    # No binary work here: `beta` already built and uploaded. This lane only
+    # pushes metadata, the reviewer demo account, and the submission itself, so a
+    # rejected version can be resubmitted without burning another build number.
+    upload_app_store_release_notes(
+      api_key: api_key,
+      app_version: options[:app_version] || ENV["VOLT_IOS_APP_VERSION"] || project_marketing_version,
+      build_number: options[:build_number] || ENV["VOLT_IOS_BUILD_NUMBER"] || project_build_number,
+      release_notes: options[:release_notes] || ENV["APP_STORE_RELEASE_NOTES"],
+      review_notes: options[:review_notes] || ENV["APP_REVIEW_NOTES"],
+      submit_for_review: truthy_env?("SUBMIT_FOR_REVIEW", true),
+      automatic_release: truthy_env?("APP_STORE_AUTOMATIC_RELEASE")
+    )
+  end
+
+  desc "Capture App Store screenshots with the VoltScreenshots UI-test scheme"
+  lane :screenshots do
+    snapshot(
+      workspace: WORKSPACE,
+      scheme: SCREENSHOT_SCHEME,
+      output_directory: SCREENSHOT_OUTPUT_DIRECTORY,
+      clear_previous_screenshots: true,
+      stop_after_first_error: true,
+      clean: true,
+      devices: ["iPhone 17 Pro Max"],
+      languages: ["en-US"],
+      launch_arguments: ["--ui-testing", "--screenshots"]
+    )
+
+    validate_iphone_screenshots_for_upload(SCREENSHOT_OUTPUT_DIRECTORY)
+    write_screenshot_report(SCREENSHOT_OUTPUT_DIRECTORY)
+  end
+
+  desc "Upload iPhone screenshots to App Store Connect"
+  lane :upload_screenshots do
+    validate_iphone_screenshots_for_upload(SCREENSHOT_OUTPUT_DIRECTORY)
+    api_key = app_store_connect_api_key_from_env
+
+    deliver(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      screenshots_path: SCREENSHOT_OUTPUT_DIRECTORY,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_app_version_update: true,
+      overwrite_screenshots: true,
+      run_precheck_before_submit: false,
+      force: true
+    )
+  end
+
+  desc "Upload designed App Store artwork screenshots to App Store Connect"
+  lane :upload_app_store_artwork do
+    validate_iphone_screenshots_for_upload(APP_STORE_ARTWORK_OUTPUT_DIRECTORY)
+    api_key = app_store_connect_api_key_from_env
+
+    deliver(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      screenshots_path: APP_STORE_ARTWORK_OUTPUT_DIRECTORY,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_app_version_update: true,
+      overwrite_screenshots: true,
+      run_precheck_before_submit: false,
+      force: true
+    )
+  end
+
+  desc "Frame generated screenshots with the iPhone 17 Pro Max device frame"
+  lane :frameit_screenshots do
+    app_root = File.expand_path("..", __dir__)
+    source_directory = File.join(app_root, SCREENSHOT_OUTPUT_DIRECTORY)
+    output_directory = File.join(app_root, FRAMED_SCREENSHOT_OUTPUT_DIRECTORY)
+    frameit_work_directory = File.join(app_root, "build/frameit-screenshots")
+
+    register_frameit_iphone_17_pro_max
+    validate_iphone_screenshots_for_upload(SCREENSHOT_OUTPUT_DIRECTORY)
+    FileUtils.rm_rf(output_directory)
+    prepare_rounded_frameit_sources(source_directory, frameit_work_directory)
+
+    frame_screenshots(
+      path: frameit_work_directory,
+      silver: true,
+      use_platform: "IOS"
+    )
+
+    Dir.glob(File.join(frameit_work_directory, "**", "*_framed.png")).each do |framed_path|
+      relative_path = framed_path.delete_prefix("#{frameit_work_directory}/")
+      destination_path = File.join(output_directory, relative_path)
+      FileUtils.mkdir_p(File.dirname(destination_path))
+      FileUtils.cp(framed_path, destination_path)
+      FileUtils.cp(framed_path, transparent_framed_path(destination_path))
+      flatten_framed_screenshot(destination_path)
+    end
+
+    write_screenshot_report(FRAMED_SCREENSHOT_OUTPUT_DIRECTORY)
+  end
+
+  desc "Create designed App Store screenshots from iPhone 17 Pro Max framed assets"
+  lane :app_store_artwork do
+    app_root = File.expand_path("..", __dir__)
+    frameit_screenshots
+    sh("ruby #{Shellwords.escape(File.join(app_root, 'scripts/render_app_store_artwork.rb'))}")
+    validate_iphone_screenshots_for_upload(APP_STORE_ARTWORK_OUTPUT_DIRECTORY)
+    write_screenshot_report(APP_STORE_ARTWORK_OUTPUT_DIRECTORY)
+  end
+end

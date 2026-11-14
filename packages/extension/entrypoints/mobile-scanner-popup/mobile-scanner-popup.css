@@ -1,0 +1,196 @@
+html,
+body {
+  height: 430px;
+  margin: 0;
+  overflow: hidden;
+  width: 340px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #f7faf8;
+  color-scheme: light dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+.popup-shell {
+  --popup-bg: #f7faf8;
+  --popup-border: rgba(15, 23, 42, 0.08);
+  --popup-muted: #6b7280;
+  --popup-text: #171717;
+  align-items: center;
+  background:
+    radial-gradient(circle at 50% -18%, rgba(34, 197, 94, 0.12), transparent 42%),
+    var(--popup-bg);
+  color: var(--popup-text);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  justify-content: center;
+  overflow: hidden;
+  padding: 16px;
+  width: 100%;
+}
+
+.popup-session-field {
+  align-items: center;
+  background: color-mix(in srgb, var(--popup-text) 4%, transparent);
+  border: 1px solid var(--popup-border);
+  border-radius: 12px;
+  display: flex;
+  flex: none;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  width: 292px;
+}
+
+.popup-session-field:focus-within {
+  border-color: rgba(34, 197, 94, 0.44);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+}
+
+.popup-session-field > svg {
+  color: var(--popup-muted);
+  flex: none;
+  height: 14px;
+  width: 14px;
+}
+
+.popup-session-field input {
+  background: transparent;
+  border: 0;
+  color: var(--popup-text);
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+  outline: 0;
+  padding: 0;
+}
+
+.popup-session-field span {
+  color: #16a34a;
+  flex: none;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.popup-qr-stack {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.popup-qr-frame {
+  aspect-ratio: 1;
+  background: #ffffff;
+  border: 1px solid var(--popup-border);
+  border-radius: 22px;
+  box-shadow:
+    0 18px 45px rgba(15, 23, 42, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  padding: 12px;
+  width: 284px;
+}
+
+.popup-qr-image {
+  border-radius: 12px;
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.popup-qr-stack p {
+  color: var(--popup-muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  margin: 0;
+  text-align: center;
+}
+
+.popup-message {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  text-align: center;
+}
+
+.popup-message svg {
+  color: #16a34a;
+  height: 28px;
+  width: 28px;
+}
+
+.popup-message strong {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.popup-message p {
+  color: var(--popup-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+  max-width: 240px;
+}
+
+.popup-message-success svg {
+  color: #16a34a;
+}
+
+.popup-retry {
+  align-items: center;
+  background: #16a34a;
+  border: 0;
+  border-radius: 10px;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  gap: 6px;
+  padding: 9px 13px;
+}
+
+.popup-retry svg {
+  color: currentColor;
+  height: 14px;
+  width: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #12110f;
+  }
+
+  .popup-shell {
+    --popup-bg: #12110f;
+    --popup-border: rgba(214, 211, 209, 0.13);
+    --popup-muted: #a8a29e;
+    --popup-text: #fafaf9;
+    background:
+      radial-gradient(circle at 50% -18%, rgba(34, 197, 94, 0.12), transparent 42%),
+      var(--popup-bg);
+  }
+
+  .popup-qr-frame {
+    box-shadow: 0 20px 52px rgba(0, 0, 0, 0.48);
+  }
+}

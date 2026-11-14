@@ -1,0 +1,17 @@
+Donut turns your iPhone into a fast companion scanner for resale and inventory workflows.
+
+Sign in with the same Donut account on iPhone and Chrome, then capture the product details that slow down listing work. Results save on your phone, sync to your private Donut workspace, and can be inserted into the computer you select.
+
+Use Donut Scanner to:
+- Scan product barcodes from your phone
+- Extract and review text with on-device OCR
+- Capture product photos or upload existing images
+- Continue an existing photo session later
+- Send text and barcodes to your selected computer
+- Extract useful identifiers like serial numbers, model numbers, IMEIs, UPCs, and others
+
+Built for resale and inventory workflows where speed, accuracy, and fewer manual steps matter.
+
+Donut Scanner is free. Sign in to scan, keep your history, sync captures to your private Donut workspace, and connect your computers. Existing App Store subscribers can restore earlier purchases from Settings.
+
+Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/

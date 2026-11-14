@@ -1,0 +1,228 @@
+import { motion, type Variants } from "motion/react";
+import { useAuth, UserButton } from "@clerk/clerk-react";
+import type { ReactNode } from "react";
+import { ArrowRight, Chrome, Github, Smartphone } from "lucide-react";
+
+import { authConfigured } from "./components/app-providers";
+
+export const chromeExtensionDownloadUrl =
+  "https://chromewebstore.google.com/detail/volt/bmgghhmlflbhlnomgnoodpidekpaaifk";
+export const mobileAppDownloadUrl =
+  "https://apps.apple.com/us/app/volt-scanner/id6771770148";
+export const repositoryUrl = "https://github.com/JuanQuenga/Donut";
+export const supportUrl = `${repositoryUrl}/issues`;
+export const donateUrl = "https://github.com/sponsors/JuanQuenga";
+
+const footerLinkGroups = [
+  {
+    title: "Links",
+    links: [
+      ["Workspace dashboard", "/dashboard"],
+      ["Privacy", "/privacy"],
+      ["Data sources", "/data-sources"],
+      [
+        "Mobile app terms",
+        "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
+      ],
+      ["Support", supportUrl],
+      ["Repository", repositoryUrl],
+      ["Donate", donateUrl],
+    ],
+  },
+];
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 18 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.65, ease: [0.22, 1, 0.36, 1] },
+  },
+};
+
+const staggerGroup: Variants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.08, delayChildren: 0.06 },
+  },
+};
+
+type SiteHeaderProps = {
+  anchorPrefix?: "" | "/";
+  variant?: "marketing" | "scanner";
+};
+
+export function SiteHeader(props: SiteHeaderProps) {
+  return <SiteHeaderFrame {...props} accountControls={<AccountLink />} />;
+}
+
+export function SiteHeaderFrame({
+  anchorPrefix = "/",
+  variant = "marketing",
+  accountControls = <NavCta href="/sign-in" label="Sign in" />,
+}: SiteHeaderProps & { accountControls?: ReactNode }) {
+  const isScanner = variant === "scanner";
+
+  return (
+    <header className="sticky top-0 z-40 border-b border-zinc-200 bg-zinc-50/90 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        <a
+          href={anchorPrefix === "" ? "#top" : "/"}
+          className="flex items-center gap-2"
+          aria-label="Donut home"
+        >
+          <img src="/brand/donut.svg" alt="" className="size-8" />
+          <span className="hidden text-sm font-semibold sm:inline">Donut</span>
+        </a>
+        {isScanner ? (
+          <nav
+            className="flex min-w-0 items-center text-sm text-zinc-600"
+            aria-label="Primary"
+          >
+            <a
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[0.85rem] border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm hover:border-zinc-900"
+              href={supportUrl}
+            >
+              Support
+              <ArrowRight size={14} />
+            </a>
+          </nav>
+        ) : (
+          <nav
+            className="flex items-center gap-5 text-sm text-zinc-600 sm:gap-7"
+            aria-label="Primary"
+          >
+            <a className="hover:text-zinc-950" href={supportUrl}>
+              Support
+            </a>
+            {accountControls}
+          </nav>
+        )}
+      </div>
+    </header>
+  );
+}
+
+/**
+ * Keep Clerk hooks behind the same domain/key check as the provider.
+ */
+function AccountLink() {
+  return authConfigured ? (
+    <ClerkAccountLink />
+  ) : (
+    <NavCta href="/sign-in" label="Sign in" />
+  );
+}
+
+function ClerkAccountLink() {
+  const { isLoaded, isSignedIn } = useAuth();
+  return isLoaded && isSignedIn ? (
+    <div className="flex items-center gap-3">
+      <NavCta href="/dashboard" label="Dashboard" />
+      <UserButton />
+    </div>
+  ) : (
+    <NavCta href="/sign-in" label="Sign in" />
+  );
+}
+
+function NavCta({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      className="inline-flex h-9 items-center justify-center gap-2 rounded-[0.85rem] border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-800 shadow-sm hover:border-zinc-900"
+      href={href}
+    >
+      {label}
+      <ArrowRight size={14} />
+    </a>
+  );
+}
+
+export function SiteFooter() {
+  return (
+    <footer id="privacy" className="bg-zinc-950 text-white">
+      <motion.div
+        className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16"
+        initial={false}
+        whileInView="visible"
+        viewport={{ once: true, margin: "-80px" }}
+        variants={staggerGroup}
+      >
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,44rem)_14rem] lg:gap-24">
+          <motion.div className="max-w-2xl" variants={fadeUp}>
+            <a
+              href="/"
+              className="inline-flex items-center gap-2"
+              aria-label="Donut home"
+            >
+              <img src="/brand/donut.svg" alt="" className="size-9" />
+              <span className="text-base font-semibold">Donut</span>
+            </a>
+            <p className="mt-5 text-sm leading-6 text-zinc-300">
+              Donut is an independent resale workflow project for pairing a
+              Chrome extension with a companion mobile capture app.
+            </p>
+            <p className="mt-4 text-sm leading-6 text-zinc-400">
+              Donut is not affiliated with, endorsed by, or sponsored by Volt
+              Resale or Paymore Electronics.
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <a
+                href={mobileAppDownloadUrl}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[0.85rem] bg-white px-4 text-sm font-semibold text-zinc-950 hover:bg-zinc-200"
+              >
+                <Smartphone size={16} />
+                Mobile app
+              </a>
+              <a
+                href={chromeExtensionDownloadUrl}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[0.85rem] border border-white/20 px-4 text-sm font-semibold text-white hover:border-white/45"
+              >
+                <Chrome size={16} />
+                Chrome extension
+              </a>
+            </div>
+          </motion.div>
+
+          <motion.div className="grid gap-8" variants={fadeUp}>
+            {footerLinkGroups.map((group) => (
+              <nav key={group.title} aria-label={group.title}>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  {group.title}
+                </h2>
+                <div className="mt-4 grid gap-3">
+                  {group.links.map(([label, href]) => (
+                    <a
+                      key={label}
+                      href={href}
+                      className="text-sm font-medium text-zinc-300 hover:text-white"
+                    >
+                      {label}
+                    </a>
+                  ))}
+                </div>
+              </nav>
+            ))}
+          </motion.div>
+        </div>
+
+        <motion.div
+          className="mt-10 flex flex-col gap-3 border-t border-white/10 pt-6 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between"
+          variants={fadeUp}
+        >
+          <p>Copyright {new Date().getFullYear()} Donut Scanner</p>
+          <p className="inline-flex items-center gap-1.5">
+            Open source on
+            <a
+              href={repositoryUrl}
+              className="inline-flex items-center gap-1.5 font-medium text-zinc-400 hover:text-white"
+            >
+              <Github size={14} />
+              GitHub
+            </a>
+          </p>
+        </motion.div>
+      </motion.div>
+    </footer>
+  );
+}

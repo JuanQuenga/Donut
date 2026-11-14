@@ -1,0 +1,80 @@
+import {
+  CLERK_CLIENT_JWT_CACHE_KEY,
+  CLERK_CLIENT_JWT_COOKIE,
+} from "../access/clerk-client-jwt";
+import { CHROME_PROFILE_AUTH_ENABLED, PROFILE_AUTH_EVENT_KEY, PROFILE_AUTH_STATE_KEY, profileAuthState, withProfileAuthStateLock } from "../access/chrome-profile-auth";
+import { CLERK_PUBLISHABLE_KEY, CLERK_SYNC_HOST } from "../access/config";
+
+type MirrorOptions = {
+  chromeApi: typeof chrome;
+  log: (...args: unknown[]) => void;
+  onChanged: () => void;
+};
+
+/*
+ * The Convex subscription lives in the offscreen document, which gets a reduced
+ * extension API surface with no chrome.cookies — so Clerk's syncHost handshake
+ * can never run there and the workspace used to stay signed in only while the
+ * sidepanel was open to hand it a token.
+ *
+ * The service worker does have chrome.cookies, so it mirrors the account's
+ * client JWT from the configured sync host into the storage cache Clerk reads
+ * when it cannot sync itself. Dev uses __clerk_db_jwt on the web app host;
+ * production uses __client on the Frontend API host.
+ * With that in place the phone and Chrome are simply on the same Clerk session,
+ * and nothing has to be connected or kept open for captures to arrive.
+ */
+export function createClerkSessionMirror({ chromeApi, log, onChanged }: MirrorOptions) {
+  const enabled = Boolean(CLERK_PUBLISHABLE_KEY);
+
+  function sync() {
+    return withProfileAuthStateLock(syncNow);
+  }
+
+  async function syncNow() {
+    if (!enabled || !chromeApi.cookies) return;
+    if (CHROME_PROFILE_AUTH_ENABLED) {
+      const stored = await chromeApi.storage.local.get(PROFILE_AUTH_STATE_KEY);
+      if (profileAuthState(stored[PROFILE_AUTH_STATE_KEY]).source !== "web") return;
+    }
+    let value: string | null = null;
+    try {
+      const cookie = await chromeApi.cookies.get({
+        url: CLERK_SYNC_HOST,
+        name: CLERK_CLIENT_JWT_COOKIE,
+      });
+      value = cookie?.value ?? null;
+    } catch (error) {
+      // An unreadable cookie is not a sign-out; leave the cached JWT alone so a
+      // transient failure cannot log the workspace out.
+      log("Failed to read the Clerk session cookie", error);
+      return;
+    }
+
+    const stored = await chromeApi.storage.local.get(CLERK_CLIENT_JWT_CACHE_KEY);
+    if ((stored[CLERK_CLIENT_JWT_CACHE_KEY] ?? null) === value) return;
+    if (value) {
+      await chromeApi.storage.local.set({ [CLERK_CLIENT_JWT_CACHE_KEY]: value });
+    } else {
+      await chromeApi.storage.local.remove(CLERK_CLIENT_JWT_CACHE_KEY);
+    }
+    if (CHROME_PROFILE_AUTH_ENABLED) {
+      await chromeApi.storage.local.set({ [PROFILE_AUTH_EVENT_KEY]: crypto.randomUUID() });
+    }
+    onChanged();
+  }
+
+  return {
+    sync,
+    initialize: () => {
+      if (!enabled) return Promise.resolve();
+      // Signing in or out rewrites this cookie, which is the only signal the
+      // service worker gets that the account changed.
+      chromeApi.cookies?.onChanged.addListener((change) => {
+        if (change.cookie.name !== CLERK_CLIENT_JWT_COOKIE) return;
+        void sync();
+      });
+      return sync();
+    },
+  };
+}

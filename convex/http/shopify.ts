@@ -1,0 +1,34 @@
+import { makeFunctionReference } from "convex/server";
+import { httpAction } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
+import { encryptToken, exchangeToken, nonceHash, storeAad, verifyCallback } from "../shopifyHelpers";
+
+const consume = makeFunctionReference<"mutation", { shop: string; state: string; browserNonceHash: string }, { id: Id<"shopifyOAuthStates">; ownerTokenIdentifier: string }>("shopifyStore:consume");
+const finish = makeFunctionReference<"mutation", { stateId: Id<"shopifyOAuthStates"> } & Pick<Doc<"shopifyStores">, "shop" | "encryptedAccessToken" | "encryptedRefreshToken" | "expiresAt" | "refreshExpiresAt">, boolean>("shopifyStore:finish");
+
+export const shopifyCallback = httpAction(async (ctx, request) => {
+  const headers = {
+    "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'", "Referrer-Policy": "no-referrer",
+    "Set-Cookie": "volt_shopify_oauth=; Max-Age=0; Path=/api/shopify/callback; HttpOnly; Secure; SameSite=Lax",
+  };
+  try {
+    const { shop, state, code } = await verifyCallback(new URL(request.url).searchParams);
+    const browserCookie = request.headers.get("Cookie")?.split(";").map((part) => part.trim()).filter((part) => part.startsWith("volt_shopify_oauth=")) ?? [];
+    if (browserCookie.length !== 1) throw new Error("Shopify browser authorization missing.");
+    const browserNonce = browserCookie[0].slice("volt_shopify_oauth=".length);
+    const owner = await ctx.runMutation(consume, { shop, state, browserNonceHash: await nonceHash(browserNonce) });
+    const tokens = await exchangeToken(shop, { code, expiring: "1" });
+    const aad = storeAad(shop);
+    const connected = await ctx.runMutation(finish, {
+      stateId: owner.id, shop,
+      encryptedAccessToken: await encryptToken(tokens.access, aad),
+      encryptedRefreshToken: await encryptToken(tokens.refresh, aad),
+      expiresAt: tokens.expiresAt, refreshExpiresAt: tokens.refreshExpiresAt,
+    });
+    if (!connected) throw new Error("Shopify connection was canceled.");
+    return new Response("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Shopify connected</title><h1>Shopify connected</h1><p>You can close this tab and return to Donut.</p></html>", { headers });
+  } catch {
+    return new Response("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Shopify connection failed</title><h1>Shopify connection failed</h1><p>Return to Donut and connect your store again. Check that the app has product read access.</p></html>", { status: 400, headers });
+  }
+});

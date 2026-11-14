@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Cancel superseded PR runs. Pushes to main get a per-run group, so a main run is
+# never cancelled or replaced while it waits in the queue.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    name: Detect native changes
+    # GitHub-hosted runners are free for public repositories.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          # Everything the macOS job reads: both iOS apps, the scanner protocol
+          # fixtures the mobile tests import, the pnpm install inputs, and this file.
+          filters: |
+            native:
+              - .github/workflows/ci.yml
+              - .node-version
+              - package.json
+              - pnpm-lock.yaml
+              - pnpm-workspace.yaml
+              - apps/mobile/**
+              - apps/kiosk-ios/**
+              - packages/scanner-protocol/**
+
+  javascript:
+    name: Tests and typechecks
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack install
+
+      - name: Cache pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Typecheck workspaces and backend
+        run: pnpm typecheck
+
+      - name: Check repository health
+        run: pnpm check:repo-health
+
+      - name: Build extension
+        run: pnpm build:extension
+
+      - name: Build web app
+        run: pnpm build:web
+
+  mobile:
+    name: Native apps and Swift helper tests
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack install
+      - name: Cache pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Cache Swift packages
+        # Cold package resolution took ~55s, mostly cloning convex-swift (~250 MB).
+        # Both xcodebuild steps reuse SwiftPM's shared repository cache.
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ hashFiles('apps/mobile/ios/Volt.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify Swift toolchain
+        run: xcrun swift --version
+      - name: Setup Ruby for CocoaPods
+        uses: ruby/setup-ruby@a0102e0972be65f351c307e2d64b9314a57c8073 # v1.324.0
+        with:
+          ruby-version: "3.3"
+      - name: Generate native workspace dependencies
+        working-directory: apps/mobile/ios
+        run: |
+          gem install cocoapods --version 1.16.2 --no-document
+          pod _1.16.2_ install --deployment
+      - name: Compile App Clip for iOS Simulator
+        # Compile every real source together, including cross-file Swift access.
+        # A direct target build does not depend on a locally generated scheme.
+        # Apple Silicon simulators only, matching the full app build below.
+        run: >-
+          xcodebuild
+          -project apps/mobile/ios/Volt.xcodeproj
+          -target VoltClip
+          -configuration Debug
+          -sdk iphonesimulator
+          ARCHS=arm64
+          CODE_SIGNING_ALLOWED=NO
+          build
+      - name: Test mobile helpers
+        run: pnpm --filter @volt/mobile test
+
+      - name: Typecheck and test iPad kiosk app
+        run: pnpm --filter @volt/kiosk-ios typecheck && pnpm --filter @volt/kiosk-ios test
+
+      - name: Compile full iPhone app for iOS Simulator
+        # The workspace plan resolves transitive Swift Package modules
+        # (ClerkKitUI needs Nuke and PhoneNumberKit) that a direct target
+        # build misses, and ConvexMobile ships an arm64-only simulator
+        # slice, so a universal build cannot link.
+        run: >-
+          xcodebuild
+          -workspace apps/mobile/ios/Volt.xcworkspace
+          -scheme Volt
+          -configuration Debug
+          -destination 'generic/platform=iOS Simulator'
+          ARCHS=arm64
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+  required:
+    # One aggregate check covering both jobs.
+    name: JavaScript and TypeScript
+    if: always()
+    needs: [changes, javascript, mobile]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every verification job to pass
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          NATIVE_CHANGED: ${{ needs.changes.outputs.native }}
+          JAVASCRIPT_RESULT: ${{ needs.javascript.result }}
+          MOBILE_RESULT: ${{ needs.mobile.result }}
+        # The native job may be skipped only when change detection ran and found no native changes.
+        run: |
+          test "$CHANGES_RESULT" = success
+          test "$JAVASCRIPT_RESULT" = success
+          if [ "$NATIVE_CHANGED" = true ]; then
+            test "$MOBILE_RESULT" = success
+          else
+            test "$MOBILE_RESULT" = skipped
+          fi

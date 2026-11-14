@@ -1,0 +1,36 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "bb8ca207d552d55ac6cab546f963f0af"
+application_url = "https://donut.juanquenga.com/shopify"
+embedded = true
+name = "Donut"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_products"
+optional_scopes = [ ]
+
+[auth]
+redirect_urls = [
+  "https://adorable-hornet-19.convex.site/api/shopify/callback",
+  "https://sincere-trout-414.convex.site/api/shopify/callback",
+]
+
+[webhooks]
+api_version = "2026-07"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request"]
+uri = "https://sincere-trout-414.convex.site/api/shopify/webhooks/customers/data_request"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/redact"]
+uri = "https://sincere-trout-414.convex.site/api/shopify/webhooks/customers/redact"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["shop/redact"]
+uri = "https://sincere-trout-414.convex.site/api/shopify/webhooks/shop/redact"
+
+[[webhooks.subscriptions]]
+topics = ["app/uninstalled"]
+uri = "https://sincere-trout-414.convex.site/api/shopify/webhooks/app/uninstalled"

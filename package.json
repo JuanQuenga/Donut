@@ -1,0 +1,53 @@
+{
+  "name": "volt-monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "icons:generate": "node scripts/generate-brand-assets.mjs",
+    "icons:check": "node scripts/generate-brand-assets.mjs --check",
+    "dev:extension": "pnpm --filter @volt/extension dev",
+    "dev:mobile:appclip": "pnpm --filter @volt/mobile ios:sim:appclip",
+    "dev:mobile:appclip:device": "pnpm --filter @volt/mobile ios:device:appclip",
+    "dev:mobile:device": "pnpm --filter @volt/mobile ios:device",
+    "dev:mobile": "pnpm --filter @volt/mobile ios:sim",
+    "dev:web": "pnpm --filter @volt/web dev",
+    "dev:kiosk": "pnpm --filter @volt/kiosk dev",
+    "test:kiosk": "node scripts/run-tests.mjs kiosk",
+    "deploy:preview": "vercel deploy --target preview",
+    "deploy:backend": "node scripts/check-shopify-backend.mjs --source-only && pnpm exec convex deploy && node scripts/check-shopify-backend.mjs",
+    "check:shopify-backend": "node scripts/check-shopify-backend.mjs",
+    "test:convex": "node scripts/run-tests.mjs convex",
+    "test:web": "node scripts/run-tests.mjs web",
+    "test": "node scripts/run-tests.mjs all",
+    "typecheck": "pnpm -r --if-present typecheck && pnpm exec tsc -p convex/tsconfig.json",
+    "check:repo-health": "node scripts/check-repo-health.mjs",
+    "ocr-flags:pull": "node scripts/ocr-flags.mjs",
+    "check:github": "node scripts/check-github-settings.mjs",
+    "build:extension": "pnpm --filter @volt/extension build",
+    "build:mobile:appclip": "pnpm --filter @volt/mobile build:ios:appclip",
+    "build:mobile": "pnpm --filter @volt/mobile build:ios",
+    "build:web": "pnpm --filter @volt/web build",
+    "build": "pnpm -r build",
+    "zip:extension": "pnpm --filter @volt/extension zip",
+    "shots": "pnpm --filter @volt/extension shots",
+    "status:extension-store": "pnpm --filter @volt/extension store:status",
+    "release:extension:dry-run": "pnpm --filter @volt/extension release:dry-run",
+    "release:extension": "pnpm --filter @volt/extension release"
+  },
+  "packageManager": "pnpm@10.14.0+sha512.ad27a79641b49c3e481a16a805baa71817a04bbe06a38d17e60e2eaee83f6a146c6a688125f5792e48dd5ba30e7da52a5cda4c3992b9ccf333f9ce223af84748",
+  "engines": { "node": "24.x" },
+  "dependencies": {
+    "@apple/app-store-server-library": "3.1.0",
+    "@volt/scanner-protocol": "workspace:*",
+    "convex": "^1.41.0",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "@edge-runtime/vm": "^5.0.0",
+    "@types/web-push": "^3.6.4",
+    "@vercel/functions": "^3.9.9",
+    "convex-test": "^0.0.53",
+    "vitest": "^4.1.9"
+  }
+}

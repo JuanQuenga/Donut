@@ -1,0 +1,430 @@
+import SwiftUI
+
+struct CameraSessionTopStatus: View {
+    let activeMode: CaptureMode
+    var liveTextCandidates: [LiveTextCandidate] = []
+    var barcodeHint = "Point camera at barcode"
+    let onSendLiveText: (LiveTextCandidate) -> Void
+
+    var body: some View {
+        Group {
+            if activeMode == .ocr, !liveTextCandidates.isEmpty {
+                LiveIdentifierStrip(
+                    candidates: liveTextCandidates,
+                    onSend: onSendLiveText
+                )
+            } else {
+                Label(captureHint, systemImage: activeMode.symbolName)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 58)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.48), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.white.opacity(0.14), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.28), radius: 9, y: 4)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var captureHint: String {
+        switch activeMode {
+        case .ocr:
+            "Frame device identifiers"
+        case .barcode:
+            barcodeHint
+        case .photo:
+            "Frame photo"
+        case .dictation:
+            "Tap to start or stop audio"
+        }
+    }
+}
+
+struct CameraSessionControls: View {
+    private let sideToolSlotWidth: CGFloat = 64
+    private let toolRowMaxWidth: CGFloat = 380
+    private let modeButtonWidth: CGFloat = 64
+    private let controlDeckHeight: CGFloat = 236
+    private let cameraToolsRowHeight: CGFloat = 64
+    private let cameraToolsVerticalOffset: CGFloat = -32
+    private let modePickerHeight: CGFloat = 42
+    private let captureActionsRowHeight: CGFloat = 96
+
+    @Binding var activeMode: CaptureMode
+    @State private var centeredMode: CaptureMode?
+    @State private var isModePickerScrolling = false
+    let torchEnabled: Bool
+    let zoomLabel: String
+    let gridVisible: Bool
+    let isRecognizingText: Bool
+    var isCaptureEnabled = true
+    var isModeSelectionEnabled = true
+    var showsModePicker = true
+    var controlRotation: Angle = .zero
+    var connectionSystemImage = "character.cursor.ibeam"
+    var connectionLabel = "Write"
+    var connectionAccessibilityLabel = "Choose write destination"
+    let onToggleTorch: () -> Void
+    let onZoomOut: () -> Void
+    let onZoomIn: () -> Void
+    let onToggleGrid: () -> Void
+    let onCapture: () -> Void
+    var onConnection: (() -> Void)?
+    /// Latest photo of this session; shown bottom-left in Photo mode like the iOS Camera app.
+    var lastPhoto: GalleryPhoto?
+    var sessionPhotoCount = 0
+    var onOpenSessionPhotos: (() -> Void)?
+    let onFinish: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            cameraToolsRow
+                .opacity(activeMode == .dictation ? 0 : isCaptureEnabled ? 1 : 0.45)
+                .allowsHitTesting(activeMode != .dictation)
+                .accessibilityHidden(activeMode == .dictation)
+                .frame(height: cameraToolsRowHeight)
+                .offset(y: cameraToolsVerticalOffset)
+
+            Spacer(minLength: 0)
+
+            if showsModePicker {
+                modePicker
+            } else {
+                Color.clear
+                    .frame(height: modePickerHeight)
+            }
+
+            Spacer(minLength: 0)
+
+            captureActionsRow
+        }
+        .frame(height: controlDeckHeight)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+        .background {
+            LinearGradient(
+                colors: [.black.opacity(0), .black.opacity(0.78), .black.opacity(0.94)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
+        }
+        .sensoryFeedback(.selection, trigger: activeMode)
+    }
+
+    private var modePicker: some View {
+        GeometryReader { geometry in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 18) {
+                    modeButton("Text", mode: .ocr)
+                    modeButton("Barcode", mode: .barcode)
+                    modeButton("Photo", mode: .photo)
+                    modeButton("Audio", mode: .dictation)
+                }
+                .scrollTargetLayout()
+                .padding(.horizontal, max(0, (geometry.size.width - modeButtonWidth) / 2))
+            }
+            .scrollTargetBehavior(.viewAligned(limitBehavior: .never, anchor: .center))
+            .scrollPosition(id: $centeredMode, anchor: .center)
+            .onAppear {
+                centeredMode = activeMode
+            }
+            .onChange(of: activeMode) { _, mode in
+                guard centeredMode != mode else { return }
+                withAnimation(.easeInOut(duration: 0.24)) {
+                    centeredMode = mode
+                }
+            }
+            .onScrollPhaseChange { _, newPhase in
+                isModePickerScrolling = newPhase != .idle
+                guard newPhase == .idle else { return }
+
+                Task { @MainActor in
+                    await Task.yield()
+                    guard !isModePickerScrolling,
+                          isModeSelectionEnabled,
+                          let mode = centeredMode,
+                          mode != activeMode
+                    else { return }
+                    activeMode = mode
+                }
+            }
+        }
+        .frame(height: modePickerHeight)
+        .disabled(!isModeSelectionEnabled)
+        .opacity(isModeSelectionEnabled ? 1 : 0.55)
+    }
+
+    private var captureActionsRow: some View {
+        ZStack {
+            HStack {
+                connectionSlot
+
+                Spacer()
+
+                finishSlot
+            }
+
+            shutterButton
+        }
+        .frame(height: captureActionsRowHeight)
+    }
+
+    private var cameraToolsRow: some View {
+        HStack {
+            gridToolSlot
+
+            Spacer()
+
+            zoomControls
+
+            Spacer()
+
+            flashToolSlot
+        }
+        .frame(maxWidth: toolRowMaxWidth)
+    }
+
+    private var zoomControls: some View {
+        HStack(spacing: 8) {
+            SessionIconButton(
+                systemImage: "minus.magnifyingglass",
+                isEnabled: isCaptureEnabled,
+                label: "Zoom out",
+                rotation: controlRotation,
+                action: onZoomOut
+            )
+            Text(zoomLabel)
+                .font(.subheadline.monospacedDigit().bold())
+                .foregroundStyle(.white)
+                .rotationEffect(controlRotation)
+                .animation(.easeInOut(duration: 0.24), value: controlRotation)
+                .frame(minWidth: 58)
+            SessionIconButton(
+                systemImage: "plus.magnifyingglass",
+                isEnabled: isCaptureEnabled,
+                label: "Zoom in",
+                rotation: controlRotation,
+                action: onZoomIn
+            )
+        }
+        .padding(.horizontal, 10)
+        .frame(minHeight: 56)
+        .background(.black.opacity(0.54), in: Capsule())
+        .overlay {
+            Capsule().stroke(.white.opacity(0.14), lineWidth: 1)
+        }
+    }
+
+    private var gridToolSlot: some View {
+        toolSlot {
+            if activeMode == .photo {
+                SessionIconButton(
+                    systemImage: gridVisible ? "grid" : "square",
+                    isActive: gridVisible,
+                    isEnabled: isCaptureEnabled,
+                    label: gridVisible ? "Hide grid lines" : "Show grid lines",
+                    rotation: controlRotation,
+                    action: onToggleGrid
+                )
+            }
+        }
+    }
+
+    private var flashToolSlot: some View {
+        toolSlot {
+            SessionIconButton(
+                systemImage: torchEnabled ? "bolt.fill" : "bolt.slash",
+                isActive: torchEnabled,
+                isEnabled: isCaptureEnabled,
+                label: torchEnabled ? "Turn flash off" : "Turn flash on",
+                rotation: controlRotation,
+                action: onToggleTorch
+            )
+        }
+    }
+
+    private func toolSlot<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ZStack {
+            Color.clear
+            content()
+        }
+        .frame(width: sideToolSlotWidth, height: sideToolSlotWidth)
+    }
+
+    private var connectionSlot: some View {
+        ZStack {
+            Color.clear
+            // Photos don't type into a computer, so in Photo mode this slot previews the last shot.
+            if activeMode == .photo, let lastPhoto, let onOpenSessionPhotos {
+                CameraLastPhotoButton(
+                    photo: lastPhoto,
+                    count: sessionPhotoCount,
+                    rotation: controlRotation,
+                    action: onOpenSessionPhotos
+                )
+            } else if let onConnection {
+                SessionSideActionButton(
+                    systemImage: connectionSystemImage,
+                    title: connectionLabel,
+                    accessibilityLabel: connectionAccessibilityLabel,
+                    rotation: controlRotation,
+                    action: onConnection
+                )
+            }
+        }
+        .frame(width: 88, height: 82)
+    }
+
+    private var finishSlot: some View {
+        SessionSideActionButton(
+            systemImage: "xmark",
+            title: "End",
+            accessibilityLabel: "End session",
+            rotation: controlRotation,
+            action: onFinish
+        )
+        .frame(width: 88, height: 82)
+    }
+
+    private func modeButton(_ title: String, mode: CaptureMode) -> some View {
+        let isSelected = activeMode == mode
+
+        return Button {
+            activeMode = mode
+        } label: {
+            VStack(spacing: 5) {
+                Text(title)
+                    .font(.subheadline.weight(isSelected ? .bold : .medium))
+                Capsule()
+                    .fill(isSelected ? .white : .clear)
+                    .frame(width: 22, height: 3)
+            }
+            .foregroundStyle(isSelected ? .white : .white.opacity(0.68))
+            .frame(width: modeButtonWidth, height: 36)
+        }
+        .buttonStyle(.plain)
+        .id(mode)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityLabel("Capture mode \(title)")
+    }
+
+    private var shutterSymbol: String {
+        if isRecognizingText {
+            return "hourglass"
+        }
+        switch activeMode {
+        case .ocr:
+            return "doc.viewfinder"
+        case .barcode:
+            return "barcode.viewfinder"
+        case .photo:
+            return "camera.viewfinder"
+        case .dictation:
+            return "mic.fill"
+        }
+    }
+
+    private var shutterAccessibilityLabel: String {
+        if isRecognizingText {
+            return "Capturing document"
+        }
+        switch activeMode {
+        case .ocr:
+            return "Capture text"
+        case .barcode:
+            return "Capture barcode"
+        case .photo:
+            return "Capture photo"
+        case .dictation:
+            return "Start or stop audio"
+        }
+    }
+
+    private var shutterButton: some View {
+        Button(action: onCapture) {
+            ZStack {
+                Circle()
+                    .fill(.white)
+                    .frame(width: 78, height: 78)
+                Circle()
+                    .stroke(.white.opacity(0.52), lineWidth: 4)
+                    .frame(width: 92, height: 92)
+                Image(systemName: shutterSymbol)
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .rotationEffect(controlRotation)
+                    .animation(.easeInOut(duration: 0.24), value: controlRotation)
+            }
+        }
+        .disabled(isRecognizingText || !isCaptureEnabled)
+        .opacity(isCaptureEnabled ? 1 : 0.55)
+        .accessibilityLabel(shutterAccessibilityLabel)
+    }
+}
+struct SessionIconButton: View {
+    let systemImage: String
+    var isActive = false
+    var isEnabled = true
+    let label: String
+    var rotation: Angle = .zero
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(isActive ? .yellow : .white)
+                .rotationEffect(rotation)
+                .animation(.easeInOut(duration: 0.24), value: rotation)
+                .frame(width: 44, height: 44)
+                .background(.black.opacity(0.52), in: Circle())
+                .overlay {
+                    Circle().stroke(.white.opacity(0.12), lineWidth: 1)
+                }
+        }
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.55)
+        .accessibilityLabel(label)
+    }
+}
+
+private struct SessionSideActionButton: View {
+    let systemImage: String
+    let title: String
+    let accessibilityLabel: String
+    var rotation: Angle = .zero
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 46, height: 46)
+                    .background(.black.opacity(0.56), in: Circle())
+                    .overlay {
+                        Circle().stroke(.white.opacity(0.14), lineWidth: 1)
+                    }
+
+                Text(title)
+                    .font(.caption2.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.white)
+            .rotationEffect(rotation)
+            .animation(.easeInOut(duration: 0.24), value: rotation)
+            .frame(width: 72, height: 76)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "pnpm build",
+  "installCommand": "pnpm install --frozen-lockfile --ignore-scripts",
+  "outputDirectory": "dist",
+  "functions": { "api/catalog.ts": { "maxDuration": 30 }, "api/requests.ts": { "maxDuration": 30 } },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.shopify.com; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'" }
+      ]
+    },
+    { "source": "/(.*)\\.(js|css|html)", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] }
+  ],
+  "redirects": [
+    {
+      "source": "/taylormi",
+      "destination": "/paymore-taylor",
+      "permanent": true
+    },
+    {
+      "source": "/taylormi/requests",
+      "destination": "/paymore-taylor/requests",
+      "permanent": true
+    },
+    {
+      "source": "/southfieldmi",
+      "destination": "/paymore-southfield",
+      "permanent": true
+    },
+    {
+      "source": "/southfieldmi/requests",
+      "destination": "/paymore-southfield/requests",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    { "source": "/:store([a-z0-9][a-z0-9-]*)/requests", "destination": "/index.html" },
+    { "source": "/:store([a-z0-9][a-z0-9-]*)", "destination": "/index.html" }
+  ]
+}

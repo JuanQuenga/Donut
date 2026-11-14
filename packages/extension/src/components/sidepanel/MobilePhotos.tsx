@@ -1,0 +1,570 @@
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Camera,
+  Check,
+  Copy,
+  Download,
+  ImagePlus,
+  RefreshCw,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import QRCode from "qrcode";
+import type { ScannerConnectionStatus } from "@volt/scanner-protocol";
+import { cn } from "../../lib/utils";
+import {
+  IconChip,
+  MobileToolHeader,
+  PairingPlaceholder,
+  PrimaryActionButton,
+  QrPairingPanel,
+  SecondaryActionButton,
+} from "./mobile-shared";
+import {
+  PHOTO_DROP_MIME,
+  dataUrlToFile,
+  dataUrlToPngBlob,
+  insertPhotosIntoPage,
+  installPhotoDropBridge,
+  normalizeImageFilename,
+  type MobilePhoto,
+} from "./mobile-photo-helpers";
+
+const STORAGE_KEY = "volt.mobilePhotos.photos";
+const MAX_PHOTOS = 80;
+
+type MobileScannerState = {
+  status: ScannerConnectionStatus;
+  qrCodeUrl: string | null;
+  error: string | null;
+  joinWindowExpiresAt?: string | null;
+};
+
+function isJoinWindowActive(state?: Pick<MobileScannerState, "qrCodeUrl" | "joinWindowExpiresAt"> | null) {
+  if (!state?.qrCodeUrl) return false;
+  if (!state.joinWindowExpiresAt) return true;
+  const expiresAt = Date.parse(state.joinWindowExpiresAt);
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
+}
+
+function trimPhotosForStorage(photos: MobilePhoto[]) {
+  return trimPhotosForState(photos).map(({ dataUrl, ...metadata }) => metadata);
+}
+
+function trimPhotosForState(photos: MobilePhoto[]) {
+  const trimmed: MobilePhoto[] = [];
+
+  for (const photo of photos.slice(0, MAX_PHOTOS)) {
+    trimmed.push(photo);
+  }
+
+  return trimmed;
+}
+
+function setPhotoDragImage(event: React.DragEvent, photo: MobilePhoto) {
+  if (!photo.dataUrl) return;
+  const image = new Image();
+  image.src = photo.dataUrl;
+  image.alt = photo.name;
+  image.className = "pointer-events-none fixed -left-[9999px] top-0 h-28 w-28 rounded-lg object-cover";
+  document.body.append(image);
+  event.dataTransfer.setDragImage(image, 56, 56);
+  window.setTimeout(() => image.remove(), 0);
+}
+
+function formatSize(bytes: number) {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default function MobilePhotos({
+  embedded = false,
+  showConnectionControls = true,
+}: {
+  embedded?: boolean;
+  showConnectionControls?: boolean;
+} = {}) {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<ScannerConnectionStatus>("disconnected");
+  const [photos, setPhotos] = useState<MobilePhoto[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [joinWindowExpiresAt, setJoinWindowExpiresAt] = useState<string | null>(null);
+
+  const selectedPhotos = useMemo(
+    () => photos.filter((photo) => selectedIds.has(photo.id)),
+    [photos, selectedIds]
+  );
+
+  const generateQrCode = useCallback(async (url: string) => {
+    return QRCode.toDataURL(url, {
+      width: 768,
+      margin: 3,
+      errorCorrectionLevel: "H",
+      color: { dark: "#1c1917", light: "#ffffff" },
+    });
+  }, []);
+
+  const persistPhotos = useCallback((nextPhotos: MobilePhoto[]) => {
+    void chrome.storage.local.set({ [STORAGE_KEY]: trimPhotosForStorage(nextPhotos) });
+  }, []);
+
+  const applyScannerState = useCallback(
+    (state: Partial<MobileScannerState> | null | undefined) => {
+      if (!state) return;
+      if (state.status) setStatus(state.status);
+      setError(state.error ?? null);
+      setJoinWindowExpiresAt(state.joinWindowExpiresAt ?? null);
+
+      if (!state.qrCodeUrl) {
+        setQrDataUrl(null);
+        return;
+      }
+
+      void generateQrCode(state.qrCodeUrl).then(setQrDataUrl);
+    },
+    [generateQrCode]
+  );
+
+  const startSession = useCallback(
+    async (force = false) => {
+      setStatus("creating");
+      setError(null);
+      const response = await chrome.runtime.sendMessage({ action: "scannerStart", force });
+      if (response?.state) applyScannerState(response.state);
+      if (response?.error) {
+        setStatus("error");
+        setError(response.error);
+      }
+    },
+    [applyScannerState]
+  );
+
+  const unpair = useCallback(() => {
+    void chrome.runtime
+      .sendMessage({ action: "scannerDisconnect" })
+      .then((response) => {
+        if (response?.state) applyScannerState(response.state);
+      });
+  }, [applyScannerState]);
+
+  const addPhoto = useCallback((photo: MobilePhoto) => {
+    setPhotos((current) => {
+      const next = trimPhotosForState([photo, ...current.filter((item) => item.id !== photo.id)]);
+      return next;
+    });
+  }, []);
+
+  const togglePhoto = useCallback((id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearPhotos = useCallback(() => {
+    setPhotos([]);
+    setSelectedIds(new Set());
+    persistPhotos([]);
+  }, [persistPhotos]);
+
+  const deleteSelected = useCallback(() => {
+    setPhotos((current) => {
+      const next = current.filter((photo) => !selectedIds.has(photo.id));
+      persistPhotos(next);
+      return next;
+    });
+    setSelectedIds(new Set());
+  }, [persistPhotos, selectedIds]);
+
+  const downloadSelected = useCallback(() => {
+    for (const photo of selectedPhotos) {
+      if (typeof photo.downloadId === "number") {
+        chrome.downloads.show(photo.downloadId);
+        continue;
+      }
+      if (!photo.dataUrl) continue;
+      const link = document.createElement("a");
+      link.href = photo.dataUrl;
+      link.download = photo.name;
+      link.click();
+    }
+  }, [selectedPhotos]);
+
+  const copySelected = useCallback(async () => {
+    if (selectedPhotos.length === 0) return;
+
+    const transferablePhotos = selectedPhotos.filter((photo) => photo.dataUrl);
+    if (transferablePhotos.length === 0) {
+      setError("Selected photos are already saved in Downloads.");
+      return;
+    }
+
+    const html = transferablePhotos
+      .map((photo) => {
+        const alt = photo.name.replace(/"/g, "&quot;");
+        return `<img src="${photo.dataUrl}" alt="${alt}">`;
+      })
+      .join("");
+    const plainText = transferablePhotos
+      .map((photo) => normalizeImageFilename(photo.name, photo.mimeType))
+      .join("\n");
+
+    try {
+      if ("ClipboardItem" in window && navigator.clipboard?.write) {
+        if (transferablePhotos.length === 1) {
+          const pngBlob = await dataUrlToPngBlob(transferablePhotos[0].dataUrl!);
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob })]);
+          setError(null);
+          return;
+        }
+
+        const clipboardData: Record<string, Blob> = {
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([plainText], { type: "text/plain" }),
+        };
+
+        await navigator.clipboard.write([new ClipboardItem(clipboardData)]);
+        setError(null);
+        return;
+      }
+
+      await navigator.clipboard.writeText(plainText);
+      setError(null);
+    } catch (err) {
+      console.warn("[Volt Mobile Photos] Clipboard copy failed", err);
+      try {
+        await navigator.clipboard.writeText(plainText);
+        setError(null);
+      } catch (fallbackErr) {
+        console.warn("[Volt Mobile Photos] Clipboard text fallback failed", fallbackErr);
+        setError("Could not copy selected photos.");
+      }
+    }
+  }, [selectedPhotos]);
+
+  const prepareActiveTabForPhotoDrop = useCallback(async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return;
+
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: installPhotoDropBridge,
+        args: [PHOTO_DROP_MIME],
+      });
+    } catch (_err) {
+      // Restricted Chrome pages cannot be scripted; the native browser drag payload still remains.
+    }
+  }, []);
+
+  const sendSelectedToActiveTab = useCallback(async () => {
+    if (selectedPhotos.length === 0) return;
+
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) {
+        setError("No active tab found for photo upload.");
+        return;
+      }
+
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: insertPhotosIntoPage,
+        args: [
+          selectedPhotos
+            .filter((photo) => photo.dataUrl)
+            .map((photo) => ({
+              dataUrl: photo.dataUrl!,
+              name: photo.name,
+              mimeType: photo.mimeType,
+            })),
+        ],
+      });
+
+      const payload = result?.result as
+        | { inserted?: boolean; reason?: string; count?: number }
+        | undefined;
+
+      if (!payload?.inserted) {
+        setError(
+          payload?.reason === "no_file_input"
+            ? "No file upload input was found on the active tab."
+            : "Could not send the selected photos to the active tab."
+        );
+        return;
+      }
+
+      setError(null);
+    } catch (_err) {
+      setError("Could not access the active tab for photo upload.");
+    }
+  }, [selectedPhotos]);
+
+  const handleDragStart = useCallback(
+    (event: React.DragEvent, photo: MobilePhoto) => {
+      const dragPhotos = selectedIds.has(photo.id) ? selectedPhotos : [photo];
+      const transferablePhotos = dragPhotos.filter((item) => item.dataUrl);
+      if (!transferablePhotos.length) {
+        event.preventDefault();
+        setError("Selected photos are already saved in Downloads.");
+        return;
+      }
+      if (!selectedIds.has(photo.id)) setSelectedIds(new Set([photo.id]));
+      void prepareActiveTabForPhotoDrop();
+
+      event.dataTransfer.effectAllowed = "copy";
+      setPhotoDragImage(event, transferablePhotos[0]);
+      event.dataTransfer.setData(PHOTO_DROP_MIME, JSON.stringify(transferablePhotos));
+      transferablePhotos.forEach((item) => {
+        const file = dataUrlToFile(item.dataUrl!, item.name, item.mimeType);
+        if (!file) return;
+        try {
+          event.dataTransfer.items.add(file);
+        } catch (_err) {
+          // Some Chrome extension drag contexts reject programmatic file items.
+        }
+      });
+      event.dataTransfer.setData("text/uri-list", transferablePhotos.map((item) => item.dataUrl!).join("\n"));
+      event.dataTransfer.setData(
+        "text/html",
+        transferablePhotos.map((item) => `<img src="${item.dataUrl}" alt="${item.name}">`).join("")
+      );
+    },
+    [prepareActiveTabForPhotoDrop, selectedIds, selectedPhotos]
+  );
+
+  useEffect(() => {
+    chrome.storage.local.get(STORAGE_KEY).then((stored) => {
+      const saved = stored[STORAGE_KEY];
+      if (Array.isArray(saved)) setPhotos(saved);
+    });
+
+    if (showConnectionControls) {
+      void chrome.runtime
+        .sendMessage({ action: "scannerGetState" })
+        .then((response) => {
+          const state = response?.state as MobileScannerState | undefined;
+          applyScannerState(state);
+          if (!isJoinWindowActive(state) && (!state || state.status !== "connected")) {
+            void startSession();
+          }
+        })
+        .catch(() => {
+          void startSession();
+        });
+    }
+  }, [applyScannerState, showConnectionControls, startSession]);
+
+  useEffect(() => {
+    const handleMessage = (message: any) => {
+      if (message?.action === "scannerStateChanged") {
+        applyScannerState(message.state);
+      } else if (message?.action === "scannerPhoto") {
+        addPhoto(message.photo);
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(handleMessage);
+    return () => chrome.runtime.onMessage.removeListener(handleMessage);
+  }, [addPhoto, applyScannerState]);
+
+  useEffect(() => {
+    if (photos.length === 0) return;
+    void prepareActiveTabForPhotoDrop();
+  }, [photos.length, prepareActiveTabForPhotoDrop]);
+
+  useEffect(() => {
+    if (!qrDataUrl || !joinWindowExpiresAt || !showConnectionControls) return;
+    const expiresAt = Date.parse(joinWindowExpiresAt);
+    if (!Number.isFinite(expiresAt)) return;
+    const refreshInMs = Math.max(0, expiresAt - Date.now() - 5_000);
+    const timer = window.setTimeout(() => {
+      void startSession(true);
+    }, refreshInMs);
+    return () => window.clearTimeout(timer);
+  }, [joinWindowExpiresAt, qrDataUrl, showConnectionControls, startSession]);
+
+  const showQr = status === "waiting" && qrDataUrl;
+  const isCreating = status === "creating";
+  const selectedCount = selectedIds.size;
+  const connected = status === "connected";
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col overflow-hidden",
+        embedded ? "bg-transparent" : "sidepanel-shell h-full",
+      )}
+    >
+      {embedded ? null : (
+        <MobileToolHeader
+          icon={<ImagePlus className="h-4 w-4" />}
+          title="Mobile Photos"
+          subtitle="Capture from paired Donut app"
+          status={status}
+          error={error}
+        />
+      )}
+
+      <div className={cn("min-h-0 flex-1 overflow-y-auto pb-5", embedded ? "px-0 pt-0" : "px-4 pt-4")}>
+        {showConnectionControls && showQr ? (
+          <div className="mb-5">
+            <QrPairingPanel
+              qrDataUrl={qrDataUrl}
+              hint="Scan with Donut, then open the Photos tab on the phone."
+            />
+          </div>
+        ) : showConnectionControls && isCreating ? (
+          <div className="mb-5 flex justify-center">
+            <PairingPlaceholder label="Setting up secure pairing…" />
+          </div>
+        ) : null}
+
+        {showConnectionControls ? <div className="flex gap-2">
+          {connected ? (
+            <SecondaryActionButton onClick={unpair} className="flex-1">
+              <RefreshCw className="h-4 w-4" />
+              Disconnect
+            </SecondaryActionButton>
+          ) : (
+            <PrimaryActionButton onClick={() => startSession(true)} className="flex-1">
+              <RefreshCw className="h-4 w-4" />
+              Restart pairing
+            </PrimaryActionButton>
+          )}
+          {photos.length > 0 ? (
+            <SecondaryActionButton
+              onClick={clearPhotos}
+              aria-label="Clear all photos"
+              className="h-11! w-11! px-0!"
+            >
+              <Trash2 className="h-4 w-4" />
+            </SecondaryActionButton>
+          ) : null}
+        </div> : null}
+
+        <div className={cn("flex items-center justify-between", showConnectionControls ? "mt-6" : "mt-0")}>
+          <div>
+            <div className="text-sm font-bold text-stone-900">Photos</div>
+            <div className="text-xs text-stone-500">
+              {photos.length} received{selectedCount ? `, ${selectedCount} selected` : ""}
+            </div>
+          </div>
+          <div className="flex gap-1">
+            <IconChip
+              onClick={copySelected}
+              disabled={!selectedCount}
+              aria-label="Copy selected"
+            >
+              <Copy className="h-4 w-4" />
+            </IconChip>
+            <IconChip
+              onClick={sendSelectedToActiveTab}
+              disabled={!selectedCount}
+              aria-label="Send selected to active tab"
+            >
+              <Upload className="h-4 w-4" />
+            </IconChip>
+            <IconChip
+              onClick={downloadSelected}
+              disabled={!selectedCount}
+              aria-label="Download selected"
+            >
+              <Download className="h-4 w-4" />
+            </IconChip>
+            <IconChip
+              onClick={deleteSelected}
+              disabled={!selectedCount}
+              aria-label="Delete selected"
+            >
+              <Trash2 className="h-4 w-4" />
+            </IconChip>
+          </div>
+        </div>
+
+        <div className="mt-3">
+          {photos.length === 0 ? (
+            <div className="liquid-glass-soft concentric-lg flex flex-col items-center border-dashed border-stone-300 px-4 py-9 text-center">
+              <div className="liquid-glass-soft mb-3 flex h-12 w-12 items-center justify-center rounded-full text-stone-400">
+                <Camera className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-semibold text-stone-700">No photos yet</p>
+              <p className="mt-1 max-w-[260px] text-xs text-stone-500">
+                Captured phone photos appear here. Select one or more, then drag them into a page photo uploader.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5">
+              {photos.map((photo) => {
+                const selected = selectedIds.has(photo.id);
+                return (
+                  <button
+                    key={photo.id}
+                    type="button"
+                    draggable
+                    onClick={() => togglePhoto(photo.id)}
+                    onPointerDown={() => void prepareActiveTabForPhotoDrop()}
+                    onMouseEnter={() => void prepareActiveTabForPhotoDrop()}
+                    onDragStart={(event) => handleDragStart(event, photo)}
+                    className={cn(
+                      "liquid-glass-soft concentric-lg group relative overflow-hidden p-0 text-left transition",
+                      "ring-1 ring-white/60 hover:ring-green-500/60",
+                      selected && "ring-2 ring-green-500 ring-offset-2 ring-offset-white",
+                    )}
+                  >
+                    {photo.dataUrl ? (
+                      <img
+                        src={photo.dataUrl}
+                        alt={photo.name}
+                        className="pointer-events-none aspect-square w-full object-cover"
+                        draggable={false}
+                      />
+                    ) : (
+                      <div className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-stone-100 px-3 text-center text-stone-500">
+                        <Download className="h-7 w-7" />
+                        <span className="text-[11px] font-semibold">Saved to Downloads</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-stone-900/80 via-stone-900/40 to-transparent px-2.5 pb-1.5 pt-3 text-[11px] text-white">
+                      <div className="truncate font-semibold">{photo.name}</div>
+                      <div className="truncate opacity-80">
+                        {[
+                          photo.width && photo.height ? `${photo.width}×${photo.height}` : "",
+                          formatSize(photo.size),
+                          photo.status === "download_failed"
+                            ? "Retryable"
+                            : photo.downloadFilename || photo.status === "browser_received"
+                              ? "Downloaded"
+                              : photo.status === "available_to_browser"
+                                ? "Downloading"
+                                : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white transition",
+                        selected ? "bg-green-500" : "bg-stone-900/40 backdrop-blur-sm",
+                      )}
+                    >
+                      {selected ? <Check className="h-3 w-3 stroke-3 text-white" /> : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

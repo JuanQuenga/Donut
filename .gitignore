@@ -1,0 +1,66 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+.env
+.env.*
+!.env.example
+!**/.env.example
+!**/.env.cws.example
+
+node_modules
+.output
+packages/extension/.shots/
+stats.html
+stats-*.json
+.wxt
+web-ext.config.ts
+apps/scanner-signal/.tmp/
+apps/mobile/.tmp/
+apps/mobile/build/fastlane/
+apps/mobile/build/fastlane-export/
+apps/mobile/vendor/bundle/
+apps/mobile/fastlane/Preview.html
+apps/mobile/fastlane/README.md
+apps/mobile/fastlane/report.xml
+apps/mobile/fastlane/screenshots/
+apps/mobile/fastlane/test_output/
+apps/mobile/fastlane/*.p8
+apps/web/dist/
+apps/kiosk/dist/
+graphify-out/
+packages/extension/docs/examples/
+packages/extension/releases/*.zip
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+.examples
+docs/examples/
+
+# Next.js
+web/.next/
+web/out/
+web/node_modules/
+web/.env*.local
+web/next-env.d.ts
+.vercel
+
+# Swift explicit-modules record cache written inside the project bundle during CLI builds
+apps/mobile/ios/Volt.xcodeproj/-Xcc/
+
+# OCR flags pulled with scripts/ocr-flags.mjs (customer photos; never commit)
+.ocr-flags/

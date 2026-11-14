@@ -1,0 +1,549 @@
+/**
+ * Volt Chrome Extension Background Service Worker
+ * Migrated to WXT background entrypoint.
+ */
+/* global chrome */
+import { defineBackground } from "wxt/utils/define-background";
+import { createActiveTabTracker } from "../src/background/active-tab-tracker";
+import { createAccessController } from "../src/background/access-controller";
+import { createCloudCursorDeliveryController } from "../src/background/cloud-cursor-delivery-controller";
+import { createCloudLiveDictationController } from "../src/background/cloud-live-dictation-controller";
+import { createCloudWorkspaceController } from "../src/background/cloud-workspace-controller";
+import { createCloudSettingsController } from "../src/background/cloud-settings-controller";
+import { createChromeProfileAuthController } from "../src/background/chrome-profile-auth-controller";
+import { createClerkSessionMirror } from "../src/background/clerk-session-mirror";
+import { createClipboardController } from "../src/background/clipboard-controller";
+import { createContextMenuController } from "../src/background/context-menu-controller";
+import { registerDisabledSiteActions } from "../src/background/disabled-site-controller";
+import { createMobileCaptureTargetController } from "../src/background/mobile-capture-targets";
+import { createMobilePhotoDownloadCleanup } from "../src/background/mobile-photo-download-cleanup";
+import { createMobileSignInController } from "../src/background/mobile-sign-in-controller";
+import { registerNavigationActions } from "../src/background/navigation-controller";
+import { createOffscreenDocumentController } from "../src/background/offscreen-document-controller";
+import { createPreviewPopupController } from "../src/background/preview-popup-controller";
+import { createPriceChartingController } from "../src/background/price-charting-controller";
+import {
+  createRuntimeActionRegistry,
+  type LogFn,
+} from "../src/background/runtime-action-registry";
+import { createScannerMessageHandler } from "../src/background/scanner-message-handler";
+import { createScannerOffscreenController } from "../src/background/scanner-offscreen";
+import { createScannerTextInserter } from "../src/background/scanner-text-insertion";
+import { createShopifyAuditController } from "../src/background/shopify-audit-controller";
+import { createHandbookController } from "../src/background/handbook-controller";
+import { registerSidepanelMessageActions } from "../src/background/sidepanel-message-controller";
+import { createSidepanelToolController } from "../src/background/sidepanel-tool-controller";
+import { createTabDeliveryController } from "../src/background/tab-delivery";
+import { createToolPopupController } from "../src/background/tool-popup-controller";
+import { registerUtilityActions } from "../src/background/utility-action-controller";
+import { handleTabMessage } from "../src/background/tab-message-handler";
+import {
+  getMessageAction,
+  isScannerOffscreenRuntimeMessage,
+  isShopifyAuditOffscreenRuntimeMessage,
+  isHandbookOffscreenRuntimeMessage,
+  parseMessageRecord,
+  parseRuntimeMessage,
+  type RuntimeMessageSender,
+  type RuntimeSendResponse,
+} from "../src/background/messages";
+import { EXTENSION_SCANNER_SIGNAL_URL } from "../src/domain/mobile-scanner-signal-url";
+import { REOPEN_NEW_TAB_AFTER_UPDATE_KEY, UPDATE_AVAILABLE_VERSION_KEY } from "../src/domain/extension-update";
+import { markReleaseNotesSeen } from "../src/components/newtab/release-notes";
+import { PROFILE_CLERK_OFFSCREEN_ACTION } from "../src/access/profile-clerk-client";
+
+type RuntimePath =
+  | `/mobile-scanner-popup.html${string}`
+  | `/newtab.html${string}`
+  | `/offscreen.html${string}`
+  | `/options.html${string}`;
+
+const SCANNER_RECONNECT_ALARM_NAME = "volt.mobileScanner.reconnectPoll";
+
+function asMessageRecord(message: unknown) {
+  return parseMessageRecord(message) ?? {};
+}
+
+function runtimeUrl(path: RuntimePath): string {
+  return chrome.runtime.getURL(path);
+}
+
+export default defineBackground({
+  main() {
+    let DEBUG = true;
+    const log: LogFn = (...args) => {
+      if (DEBUG) console.log("[Volt Service Wroker]", ...args);
+    };
+
+    log("Service worker booted", { time: new Date().toISOString() });
+
+    const registry = createRuntimeActionRegistry();
+    const activeTabs = createActiveTabTracker({
+      chromeApi: chrome,
+      onActivated: (tabId) => {
+        void scannerTargets.updateMobileCaptureTarget(
+          scannerTargets.getTrackedTarget(tabId),
+          null
+        );
+      },
+      onRemoved: (tabId) => scannerTargets.deleteTrackedTarget(tabId),
+    });
+    const sidepanelTools = createSidepanelToolController({
+      chromeApi: chrome,
+      log,
+      getFallbackTabIds: activeTabs.getFallbackTabIds,
+    });
+    const offscreenDocument = createOffscreenDocumentController({
+      chromeApi: chrome,
+      log,
+      runtimeUrl,
+    });
+    const scannerOffscreen = createScannerOffscreenController({
+      chromeApi: chrome,
+      log,
+      createOffscreenDocument: offscreenDocument.createOffscreenDocument,
+      getOffscreenContexts: offscreenDocument.getOffscreenContexts,
+      signalUrl: EXTENSION_SCANNER_SIGNAL_URL,
+      reconnectAlarmName: SCANNER_RECONNECT_ALARM_NAME,
+    });
+    const access = createAccessController({
+      chromeApi: chrome,
+      disconnectScanner: () =>
+        scannerOffscreen.sendScannerOffscreenMessage({
+          action: "scannerOffscreenDisconnect",
+        }),
+      log,
+      requestClerkToken: async () => {
+        const response = await scannerOffscreen.sendScannerOffscreenMessage({
+          action: "accessOffscreenGetClerkToken",
+          source: "volt-service-worker",
+        });
+        const record = parseMessageRecord(response);
+        return typeof record?.token === "string" ? record.token : null;
+      },
+      signalUrl: EXTENSION_SCANNER_SIGNAL_URL,
+    });
+    const photoDownloadCleanup = createMobilePhotoDownloadCleanup({
+      chromeApi: chrome,
+      log,
+    });
+    const scannerTargets = createMobileCaptureTargetController({
+      chromeApi: chrome,
+      log,
+      sendScannerOffscreenMessage: scannerOffscreen.sendScannerOffscreenMessage,
+    });
+    const clipboard = createClipboardController({
+      chromeApi: chrome,
+      createOffscreenDocument: offscreenDocument.createOffscreenDocument,
+      log,
+    });
+    const scannerTextInserter = createScannerTextInserter({
+      chromeApi: chrome,
+      log,
+      getTrackedTarget: scannerTargets.getTrackedTarget,
+      copyWithOffscreen: (text) =>
+        clipboard.handleClipboardWithOffscreen("copyToClipboard", text),
+    });
+    const cloudLiveDictation = createCloudLiveDictationController({
+      insertScannerText: scannerTextInserter.insertScannerText,
+      log,
+    });
+    const cloudCursorDeliveries = createCloudCursorDeliveryController({
+      chromeApi: chrome,
+      insertScannerText: scannerTextInserter.insertScannerText,
+      finalizeLiveDictation: cloudLiveDictation.finalizeDraft,
+      acknowledgeDelivery: async (deliveryId, outcome) => {
+        const response = await scannerOffscreen.sendScannerOffscreenMessage({
+          action: "workspaceOffscreenAcknowledgeCursorDelivery",
+          deliveryId,
+          state: outcome.state,
+          ...(outcome.errorCode ? { errorCode: outcome.errorCode } : {}),
+        });
+        const record = parseMessageRecord(response);
+        if (record?.success !== true) {
+          throw new Error(
+            typeof record?.error === "string"
+              ? record.error
+              : "Cursor delivery acknowledgement failed.",
+          );
+        }
+      },
+      log,
+    });
+    const mobileSignIn = createMobileSignInController({
+      chromeApi: chrome,
+      sendOffscreenMessage: scannerOffscreen.sendScannerOffscreenMessage,
+      log,
+    });
+    const cloudWorkspace = createCloudWorkspaceController({
+      chromeApi: chrome,
+      ensureOffscreenDocument: scannerOffscreen.ensureScannerOffscreenDocument,
+      handleCursorDeliveries: cloudCursorDeliveries.handleDeliveries,
+      handleLiveDictationDrafts: cloudLiveDictation.handleDrafts,
+      handleSignInRequests: mobileSignIn.handleRequests,
+      sendOffscreenMessage: scannerOffscreen.sendScannerOffscreenMessage,
+      log,
+    });
+    const cloudSettings = createCloudSettingsController({
+      chromeApi: chrome,
+      extensionId: chrome.runtime.id,
+      sendOffscreenMessage: scannerOffscreen.sendScannerOffscreenMessage,
+    });
+    cloudSettings.start();
+    const shopifyAudit = createShopifyAuditController({
+      chromeApi: chrome,
+      extensionId: chrome.runtime.id,
+      sendOffscreenMessage: scannerOffscreen.sendScannerOffscreenMessage,
+    });
+    const handbook = createHandbookController({
+      extensionId: chrome.runtime.id,
+      sendOffscreenMessage: scannerOffscreen.sendScannerOffscreenMessage,
+      accountEpoch: cloudWorkspace.accountEpoch,
+    });
+    const clerkSessionMirror = createClerkSessionMirror({
+      chromeApi: chrome,
+      log,
+      onChanged: () => {
+        void cloudWorkspace.handleAccountSessionChanged()
+          .catch(() => undefined)
+          .then(() => cloudSettings.pull())
+          .catch(() => undefined);
+      },
+    });
+    const chromeProfileAuth = createChromeProfileAuthController({
+      chromeApi: chrome,
+      sendOffscreenMessage: scannerOffscreen.sendScannerOffscreenMessage,
+      syncWebSession: () => clerkSessionMirror.sync(),
+      onChanged: () => {
+        void cloudWorkspace.handleAccountSessionChanged().then(() => cloudSettings.pull()).catch(() => undefined);
+      },
+    });
+    const tabDelivery = createTabDeliveryController({ chromeApi: chrome, log });
+    const previewPopups = createPreviewPopupController({ chromeApi: chrome, log });
+    const toolPopups = createToolPopupController({
+      chromeApi: chrome,
+      log,
+      toggleSidePanelForTab: sidepanelTools.toggleForTab,
+    });
+    const scannerMessages = createScannerMessageHandler({
+      chromeApi: chrome,
+      log,
+      sendScannerOffscreenMessage: scannerOffscreen.sendScannerOffscreenMessage,
+      getScannerPushSubscription: scannerOffscreen.getScannerPushSubscription,
+      getMobileCaptureTarget: scannerTargets.getMobileCaptureTarget,
+      updateMobileCaptureTarget: scannerTargets.updateMobileCaptureTarget,
+      insertScannerText: scannerTextInserter.insertScannerText,
+      recordMobilePhotoDownload: photoDownloadCleanup.recordMobilePhotoDownload,
+      openMobileScannerPairingPopup,
+      resetMobileScannerActionPopup,
+    });
+    const priceCharting = createPriceChartingController({ chromeApi: chrome, log });
+
+    async function resetMobileScannerActionPopup() {
+      try {
+        await chrome.action.setPopup({ popup: "" });
+      } catch (_) {}
+    }
+
+    async function openMobileScannerPairingPopup(mode: string | null, state: unknown) {
+      const popupUrl = new URL(runtimeUrl("/mobile-scanner-popup.html"));
+      const stateRecord = asMessageRecord(state);
+      if (mode) popupUrl.searchParams.set("mode", mode);
+      if (stateRecord.status) {
+        popupUrl.searchParams.set("status", String(stateRecord.status));
+      }
+
+      await chrome.action.setPopup({
+        popup: `${popupUrl.pathname.replace(/^\//, "")}${popupUrl.search}`,
+      });
+      try {
+        await chrome.action.openPopup();
+      } finally {
+        await resetMobileScannerActionPopup();
+      }
+    }
+
+    async function openOptionsPage() {
+      try {
+        await chrome.tabs.create({
+          url: runtimeUrl("/options.html"),
+          active: true,
+        });
+        return true;
+      } catch (error) {
+        log("Failed to open options page", error);
+        return false;
+      }
+    }
+
+    activeTabs.initialize();
+    disableActionClickSidepanel();
+    void resetMobileScannerActionPopup();
+    registerActions();
+    registerListeners();
+
+    function disableActionClickSidepanel() {
+      try {
+        chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: false });
+      } catch (error) {
+        log("Failed to disable side panel action click behavior:", error);
+      }
+    }
+
+    function registerActions() {
+      registerSidepanelMessageActions({
+        chromeApi: chrome,
+        getCurrentTabId: activeTabs.getCurrentActiveTabId,
+        getLastTabId: activeTabs.getLastActiveTabId,
+        getSidePanelState: sidepanelTools.getStateForWindow,
+        log,
+        registry,
+        setSidePanelState: sidepanelTools.setStateForWindow,
+        toggleSidePanelForTab: sidepanelTools.toggleForTab,
+      });
+      toolPopups.registerActions(registry);
+      previewPopups.registerActions(registry);
+      clipboard.registerActions(registry);
+      registerNavigationActions({
+        chromeApi: chrome,
+        log,
+        registry,
+        sendToActiveTab: tabDelivery.sendToActiveTab,
+      });
+      registerUtilityActions({
+        chromeApi: chrome,
+        getDebug: () => DEBUG,
+        log,
+        openOptionsPage,
+        registry,
+        runtimeUrl,
+        setDebug: (nextDebug) => {
+          DEBUG = nextDebug;
+        },
+      });
+      registerDisabledSiteActions({ chromeApi: chrome, registry });
+    }
+
+    function registerListeners() {
+      createContextMenuController({
+        chromeApi: chrome,
+        getFallbackTabId: () =>
+          activeTabs.getCurrentActiveTabId() ?? activeTabs.getLastActiveTabId(),
+        log,
+        toggleSidePanelForTab: sidepanelTools.toggleForTab,
+      }).register();
+
+      chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+        void shopifyAudit.handleTabRemoved(tabId, removeInfo);
+      });
+
+      chrome.action.onClicked.addListener((tab) => {
+        sidepanelTools.openForWindowPreservingTool(tab.windowId);
+      });
+
+      chrome.commands.onCommand.addListener((command) => {
+        if (command === "open-options") {
+          log("Open options command triggered");
+          openOptionsPage().catch((error) =>
+            log("openOptions command handler error", error)
+          );
+        } else if (command === "reopen-last-tab") {
+          log("Reopen last tab command triggered");
+          chrome.sessions.getRecentlyClosed({ maxResults: 1 }, (sessions) => {
+            if (chrome.runtime.lastError) {
+              log("Error getting recently closed tabs:", chrome.runtime.lastError);
+              return;
+            }
+            const closedTab = sessions.find((session) => session.tab);
+            if (closedTab?.tab) {
+              chrome.sessions.restore(closedTab.tab.sessionId, () => {
+                if (chrome.runtime.lastError) {
+                  log("Error restoring tab:", chrome.runtime.lastError);
+                } else {
+                  log("Successfully restored last closed tab");
+                }
+              });
+            } else {
+              log("No recently closed tabs found");
+            }
+          });
+        } else if (command === "promote-preview") {
+          log("Promote preview command triggered");
+          previewPopups.promotePreviewToTab();
+        }
+      });
+
+      // Chrome installs a downloaded update once Volt goes idle, which can wait
+      // until the browser restarts; the new tab offers to restart sooner.
+      chrome.runtime.onUpdateAvailable.addListener(({ version }) => {
+        log("onUpdateAvailable", version);
+        void chrome.storage.local.set({ [UPDATE_AVAILABLE_VERSION_KEY]: version });
+      });
+
+      chrome.runtime.onInstalled.addListener((details) => {
+        log("onInstalled", details);
+        chrome.storage.local.set({
+          isEnabled: true,
+          autoShowModal: true,
+          vibrationEnabled: true,
+          debugLogs: true,
+        });
+
+        disableActionClickSidepanel();
+
+        if (details.reason === "install") {
+          log("First installation detected, opening Volt new tab");
+          // A new user hasn't missed anything, so skip the What's new popup.
+          void markReleaseNotesSeen(chrome.runtime.getManifest().version).then(() => chrome.tabs.create({
+            url: runtimeUrl("/newtab.html"),
+            active: true,
+          }));
+        }
+        if (details.reason === "update") {
+          void chrome.storage.local.get(REOPEN_NEW_TAB_AFTER_UPDATE_KEY).then((stored) => {
+            if (!stored[REOPEN_NEW_TAB_AFTER_UPDATE_KEY]) return;
+            void chrome.storage.local.remove(REOPEN_NEW_TAB_AFTER_UPDATE_KEY);
+            void chrome.tabs.create({ url: runtimeUrl("/newtab.html"), active: true });
+          });
+        }
+
+        scannerOffscreen.bootstrapScannerReconnectListener("installed");
+        scannerOffscreen.ensureScannerReconnectAlarm();
+        photoDownloadCleanup.ensureCleanupAlarm();
+      });
+
+      chrome.runtime.onStartup?.addListener(() => {
+        log("onStartup");
+        chrome.storage.local.get({ debugLogs: true }, (cfg) => {
+          DEBUG = !!cfg.debugLogs;
+          log("Debug flag loaded", DEBUG);
+        });
+        void scannerOffscreen.pollScannerReconnectRequests("startup");
+        scannerOffscreen.ensureScannerReconnectAlarm();
+        photoDownloadCleanup.ensureCleanupAlarm();
+      });
+
+      void scannerOffscreen.pollScannerReconnectRequests("background-main");
+      void access.initialize();
+      void chromeProfileAuth.initialize().then(() => clerkSessionMirror.initialize())
+        .then(() => cloudWorkspace.initialize())
+        .then(() => cloudSettings.pull())
+        .catch(() => undefined);
+      scannerOffscreen.ensureScannerReconnectAlarm();
+      photoDownloadCleanup.ensureCleanupAlarm();
+
+      chrome.alarms?.onAlarm?.addListener((alarm) => {
+        if (alarm?.name === cloudWorkspace.alarmName) {
+          // cookies.onChanged does not fire while the worker is asleep, so the
+          // workspace alarm is also when a missed sign-in gets picked up.
+          void clerkSessionMirror.sync().then(() => cloudSettings.pull()).catch(() => undefined);
+          void cloudWorkspace.handleAlarm();
+          return;
+        }
+        if (alarm?.name === access.alarmName) {
+          void access.handleAlarm();
+          return;
+        }
+        if (alarm?.name === scannerOffscreen.alarmName) {
+          void scannerOffscreen.pollScannerReconnectRequests("alarm");
+          return;
+        }
+        if (alarm?.name === photoDownloadCleanup.alarmName) {
+          void photoDownloadCleanup.cleanupExpiredDownloads();
+        }
+      });
+
+      self.addEventListener("push", (event: Event) => {
+        scannerOffscreen.handlePushEvent(
+          event as Parameters<typeof scannerOffscreen.handlePushEvent>[0]
+        );
+      });
+
+      chrome.notifications?.onClicked?.addListener((notificationId) => {
+        void mobileSignIn.handleNotificationClicked(notificationId).catch((error: unknown) => {
+          log("Failed to open sign-in QR", error instanceof Error ? error.message : error);
+        });
+      });
+
+      chrome.runtime.onSuspend?.addListener(() => {
+        log("Extension suspended, cleaning up resources");
+      });
+
+      chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+    }
+
+    function handleRuntimeMessage(
+      rawMessage: unknown,
+      sender: RuntimeMessageSender,
+      sendResponse: RuntimeSendResponse
+    ) {
+      if (getMessageAction(rawMessage) === PROFILE_CLERK_OFFSCREEN_ACTION) return false;
+      if (chromeProfileAuth.handleMessage(rawMessage, sender, sendResponse)) return true;
+      if (access.handleMessage(rawMessage, sender, sendResponse)) return true;
+      if (cloudSettings.handleMessage(rawMessage, sender, sendResponse)) return true;
+      if (cloudWorkspace.handleMessage(rawMessage, sender, sendResponse)) return true;
+      if (mobileSignIn.handleMessage(rawMessage, sender, sendResponse)) return true;
+      if (shopifyAudit.handleMessage(rawMessage, sender, sendResponse)) return true;
+      if (isShopifyAuditOffscreenRuntimeMessage(rawMessage)) return false;
+      if (handbook.handleMessage(rawMessage, sender, sendResponse)) return true;
+      if (isHandbookOffscreenRuntimeMessage(rawMessage)) return false;
+      const message = parseRuntimeMessage(rawMessage);
+
+      if (message && isScannerOffscreenRuntimeMessage(message)) {
+        return false;
+      }
+
+      if (message && "type" in message && message.type === "EXTENSION_HEALTH_CHECK") {
+        log("Extension health check received from tab:", sender.tab?.id);
+        sendResponse({ status: "healthy", timestamp: Date.now() });
+        return true;
+      }
+
+      if (message && "type" in message && message.type === "CONTENT_SCRIPT_READY") {
+        log("Content script ready notification from tab:", sender.tab?.id);
+        sendResponse({ status: "acknowledged" });
+        return true;
+      }
+
+      log("onMessage", {
+        message: message ?? rawMessage,
+        sender: { id: sender?.tab?.id, url: sender?.tab?.url },
+      });
+
+      if (!message) {
+        log("Unknown action", getMessageAction(rawMessage));
+        sendResponse({ ok: false, error: "unknown_action" });
+        return true;
+      }
+
+      if (priceCharting.handleMessage(message, sendResponse)) return true;
+      if (!("action" in message)) return false;
+
+      if (
+        handleTabMessage(message, sender, sendResponse, {
+          getPreviousActiveTabId: activeTabs.getPreviousActiveTabId,
+        })
+      ) {
+        return true;
+      }
+
+      const scannerMessageResult = scannerMessages.handleScannerMessage(
+        message,
+        sender,
+        sendResponse
+      );
+      if (
+        scannerMessageResult !== false ||
+        ("action" in message && message.action === "mobileCursorTargetChanged")
+      ) {
+        return scannerMessageResult;
+      }
+
+      if (registry.handle(message, sender, sendResponse)) return true;
+
+      log("Unknown action", "action" in message ? message.action : null);
+      sendResponse({ ok: false, error: "unknown_action" });
+      return true;
+    }
+  },
+});

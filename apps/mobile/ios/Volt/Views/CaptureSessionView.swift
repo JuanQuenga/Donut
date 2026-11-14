@@ -1,0 +1,401 @@
+import ClerkKit
+import SwiftUI
+
+struct CaptureSessionView: View {
+    @Environment(ScannerStore.self) private var store
+    @Environment(Clerk.self) private var clerk
+    @Binding var isPresented: Bool
+    let mode: CaptureMode
+    @State private var gridVisible = true
+    @State private var selectedTextRegion: RecognizedTextRegion?
+    @State private var selectedTextSnippet: UIImage?
+    @State private var selectedCleanedText: String?
+    @State private var isShowingRawText = false
+    @State private var isCleaningSelectedText = false
+    @State private var cleanupRequestID = UUID()
+    @State private var isTargetPickerPresented = false
+    @State private var isSessionPhotosPresented = false
+    /// `onAppear` fires again when a full-screen cover closes; only the first one picks the mode.
+    @State private var hasStartedSession = false
+    /// Focus of the extracted text field. While typing, the card moves to the top so the keyboard
+    /// never hides its photo clip, and the camera controls step aside.
+    @FocusState private var isTextInputFocused: Bool
+
+    /// Photos taken in this camera session, newest first.
+    private var sessionPhotos: [GalleryPhoto] {
+        guard let batchId = store.activeCaptureBatchId else { return [] }
+        return store.results
+            .filter { $0.kind == .photo && $0.batchId == batchId && $0.hasPhoto }
+            .sorted { $0.capturedAt > $1.capturedAt }
+            .map(\.galleryPhoto)
+    }
+
+    var body: some View {
+        @Bindable var store = store
+
+        ZStack {
+            if let reviewImage = store.ocrReviewImage {
+                OcrReviewLayer(
+                    image: reviewImage,
+                    regions: store.ocrTextRegions,
+                    selectedRegion: selectedTextRegion,
+                    imageContentMode: ScreenshotScenario.isEnabled ? .fill : .fit,
+                    fillFocusX: ScreenshotScenario.isEnabled ? 0.565 : 0.5,
+                    onSelectRegion: { selectTextRegion($0) }
+                )
+                    .ignoresSafeArea()
+            } else {
+                // Photo mode stays inside the safe area so the square viewfinder can centre itself in
+                // whatever the status bar and the control deck leave behind. Text and barcode keep
+                // their full-bleed preview.
+                ScannerCameraLayer(gridVisible: gridVisible)
+                    .ignoresSafeArea(edges: store.activeMode == .photo ? [] : .all)
+                    .shutterFeedback(trigger: store.photoCaptureCount)
+                    .opacity(store.activeMode == .dictation ? 0 : 1)
+                    .allowsHitTesting(store.activeMode != .dictation)
+            }
+
+            if selectedTextRegion != nil {
+                if isTextInputFocused {
+                    // Tapping outside the card closes the keyboard.
+                    Color.black.opacity(0.35)
+                        .ignoresSafeArea()
+                        .onTapGesture { isTextInputFocused = false }
+                        .transition(.opacity)
+                }
+
+                ExtractedTextActionCard(
+                    text: selectedTextPreview,
+                    rawText: selectedTextRegion?.text ?? "",
+                    isShowingRaw: isShowingRawText,
+                    isCleaning: isCleaningSelectedText,
+                    onToggleRepresentation: {
+                        isShowingRawText.toggle()
+                    },
+                    onSend: { outgoingText in
+                        guard selectedTextRegion != nil else { return }
+                        store.sendRecognizedText(outgoingText)
+                        resetSelectedText()
+                    },
+                    onDismiss: {
+                        resetSelectedText()
+                    },
+                    inputFocus: $isTextInputFocused,
+                    snippet: selectedTextSnippet,
+                    flagState: store.isOcrFlaggingAvailable ? store.ocrFlagState : nil,
+                    onFlag: store.isOcrFlaggingAvailable ? { correctedText in flagSelectedText(correctedText: correctedText) } : nil
+                )
+                .padding(.top, isTextInputFocused ? 8 : 0)
+                .frame(maxHeight: .infinity, alignment: isTextInputFocused ? .top : .center)
+                .transition(.scale(scale: 0.96).combined(with: .opacity))
+            }
+
+            if store.activeMode == .dictation, store.ocrReviewImage == nil {
+                VStack(spacing: 10) {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 42, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text(store.dictationTranscript.isEmpty ? "Speak now" : store.dictationTranscript)
+                        .font(.title3.weight(.medium))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(6)
+                    Text(store.dictationDraftStatus)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.78))
+                }
+                .padding(24)
+                .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .padding(.horizontal, 24)
+                .allowsHitTesting(false)
+            }
+
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.88), value: isTextInputFocused)
+        .background(Color.black.ignoresSafeArea())
+        .overlay(alignment: .top) {
+            VStack(spacing: 8) {
+                // The open extracted text card shows its own photo clip; the status chips would cover it.
+                if selectedTextRegion == nil {
+                CameraSessionTopStatus(
+                    activeMode: store.activeMode,
+                    liveTextCandidates: store.camera.liveTextCandidates,
+                    barcodeHint: ScreenshotScenario.current == .captureBarcode ? "Send '883929739929'" : "Point camera at barcode",
+                    onSendLiveText: { candidate in
+                        store.sendRecognizedText(candidate.value)
+                    }
+                )
+                }
+
+                if let toast = store.captureDeliveryToast {
+                    CaptureDeliveryToastView(toast: toast)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: store.captureDeliveryToast?.id)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if store.ocrReviewImage != nil {
+                OcrReviewControls(
+                    regionCount: store.ocrTextRegions.count,
+                    targetLabel: CloudTargetLabel.targetLabel(for: store),
+                    targetSystemImage: store.cloudWorkspace.selectedTargetComputer == nil ? "iphone" : "desktopcomputer",
+                    onChangeTarget: {
+                        isTargetPickerPresented = true
+                    },
+                    onRetake: {
+                        resetSelectedText()
+                        store.clearOcrReview()
+                    },
+                    onFinish: {
+                        resetSelectedText()
+                        store.clearOcrReview()
+                        isPresented = false
+                    }
+                )
+                .opacity(isTextInputFocused ? 0 : 1)
+                .allowsHitTesting(!isTextInputFocused)
+            } else {
+                CameraSessionControls(
+                    activeMode: $store.activeMode,
+                    torchEnabled: store.camera.torchEnabled,
+                    zoomLabel: store.camera.zoomDisplayLabel,
+                    gridVisible: gridVisible,
+                    isRecognizingText: store.isRecognizingText || store.isDictationBusy,
+                    isCaptureEnabled: !store.isDictationBusy,
+                    isModeSelectionEnabled: !store.isDictating && !store.isDictationBusy,
+                    showsModePicker: true,
+                    controlRotation: .degrees(store.camera.captureOrientation.controlRotationDegrees),
+                    connectionSystemImage: "character.cursor.ibeam",
+                    connectionLabel: "Write",
+                    connectionAccessibilityLabel: "Choose write destination",
+                    onToggleTorch: {
+                        store.camera.setTorchEnabled(!store.camera.torchEnabled)
+                    },
+                    onZoomOut: {
+                        store.camera.adjustZoom(by: -0.25)
+                    },
+                    onZoomIn: {
+                        store.camera.adjustZoom(by: 0.25)
+                    },
+                    onToggleGrid: {
+                        gridVisible.toggle()
+                    },
+                    onCapture: {
+                        Task {
+                            if store.activeMode == .dictation {
+                                if store.isDictating {
+                                    await store.stopLiveDictation()
+                                } else {
+                                    await store.startLiveDictation()
+                                }
+                            } else {
+                                await store.capture()
+                            }
+                        }
+                    },
+                    onConnection: {
+                        isTargetPickerPresented = true
+                    },
+                    lastPhoto: sessionPhotos.first,
+                    sessionPhotoCount: sessionPhotos.count,
+                    onOpenSessionPhotos: {
+                        isSessionPhotosPresented = true
+                    },
+                    onFinish: {
+                        store.clearOcrReview()
+                        isPresented = false
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $isTargetPickerPresented) {
+            CloudTargetPickerSheet()
+        }
+        .fullScreenCover(isPresented: $isSessionPhotosPresented) {
+            // Stays mounted when the last photo is deleted, so the viewer can dismiss itself.
+            PhotoGalleryViewer(
+                photos: sessionPhotos,
+                startID: sessionPhotos.first?.id ?? UUID(),
+                onSend: { photo in Task { await store.insertResultIntoComputer(id: photo.id) } },
+                onDelete: { photo in store.removeResult(id: photo.id) }
+            )
+        }
+        .onChange(of: sessionPhotos.isEmpty) { _, isEmpty in
+            if isEmpty { isSessionPhotosPresented = false }
+        }
+        .onAppear {
+            if !hasStartedSession {
+                hasStartedSession = true
+                store.activeMode = mode
+            }
+            if ScreenshotScenario.current == .captureReviewSend,
+               let region = store.ocrTextRegions.first {
+                selectTextRegion(region)
+            }
+        }
+        .task {
+            await store.camera.requestAccess()
+            syncCameraForCaptureState(isReviewingOcr: store.ocrReviewImage != nil)
+        }
+        .task {
+            await store.refreshOcrFlaggingAvailability()
+        }
+        .task(id: selectedTextRegion?.id) {
+            selectedTextSnippet = selectedTextRegion.flatMap { region in
+                store.ocrReviewImage?.ocrSnippet(for: region.quadrilateral)
+            }
+        }
+        .onChange(of: store.ocrReviewImage != nil) { _, isReviewingOcr in
+            syncCameraForCaptureState(isReviewingOcr: isReviewingOcr)
+            resetSelectedText()
+        }
+        .onChange(of: store.activeMode) { _, _ in
+            guard !store.isDictating else { return }
+            syncCameraForCaptureState(isReviewingOcr: store.ocrReviewImage != nil)
+        }
+        .task(id: store.captureDeliveryToast?.id) {
+            guard let toast = store.captureDeliveryToast else { return }
+            try? await Task.sleep(for: .seconds(toast.tone == .failure ? 3 : 2))
+            if store.captureDeliveryToast?.id == toast.id {
+                store.captureDeliveryToast = nil
+            }
+        }
+        .onDisappear {
+            resetSelectedText()
+            store.captureDeliveryToast = nil
+            store.camera.stop()
+            Task { await store.cancelLiveDictation() }
+        }
+    }
+
+    private func syncCameraForCaptureState(isReviewingOcr: Bool) {
+        if isReviewingOcr || store.activeMode == .dictation {
+            store.camera.stop()
+            return
+        } else {
+            store.camera.start()
+            store.camera.setLiveTextScanningEnabled(store.activeMode == .ocr)
+            store.camera.setBarcodeScanningEnabled(store.activeMode == .barcode)
+        }
+    }
+
+    private func selectTextRegion(_ region: RecognizedTextRegion) {
+        resetSelectedText()
+        selectedTextRegion = region
+        cleanupSelectedText(region)
+    }
+
+    private func cleanupSelectedText(_ region: RecognizedTextRegion) {
+        let requestID = UUID()
+        cleanupRequestID = requestID
+        isCleaningSelectedText = true
+        isShowingRawText = false
+        store.statusText = "Cleaning text"
+        let context = nearbyOcrContext(for: region)
+        Task { @MainActor in
+            let result = await OcrTextCleaner.clean(text: region.text, context: context)
+            guard cleanupRequestID == requestID,
+                  selectedTextRegion?.id == region.id
+            else { return }
+            selectedCleanedText = result.text
+            isCleaningSelectedText = false
+            store.statusText = result.usedFoundationModel ? "Text cleaned on device" : "Text cleaned"
+        }
+    }
+
+    private func flagSelectedText(correctedText: String) {
+        guard let region = selectedTextRegion else { return }
+        let cleanedText = selectedCleanedText
+        Task {
+            await store.flagOcrSelection(
+                rawText: region.text,
+                cleanedText: cleanedText,
+                correctedText: correctedText,
+                using: clerk
+            )
+        }
+    }
+
+    private func resetSelectedText() {
+        isTextInputFocused = false
+        if store.ocrFlagState != .sending { store.ocrFlagState = .idle }
+        cleanupRequestID = UUID()
+        selectedCleanedText = nil
+        selectedTextRegion = nil
+        isShowingRawText = false
+        isCleaningSelectedText = false
+    }
+
+    private func nearbyOcrContext(for region: RecognizedTextRegion) -> String {
+        let nearbyRegions = store.ocrTextRegions
+            .filter { $0.id != region.id }
+            .sorted { lhs, rhs in
+                distance(from: region, to: lhs) < distance(from: region, to: rhs)
+            }
+            .prefix(4)
+        let identifierKind = LiveTextIdentifierMatcher.match(region.text)?.kind.rawValue ?? "Text"
+        return (["Selected identifier type: \(identifierKind)"] + nearbyRegions.map(\.text))
+            .joined(separator: "\n")
+    }
+
+    private func distance(from region: RecognizedTextRegion, to other: RecognizedTextRegion) -> CGFloat {
+        let dx = region.boundingBox.midX - other.boundingBox.midX
+        let dy = region.boundingBox.midY - other.boundingBox.midY
+        return (dx * dx) + (dy * dy)
+    }
+
+    private var selectedTextValue: String {
+        guard let selectedTextRegion else { return "" }
+        guard !isShowingRawText, let selectedCleanedText else {
+            return selectedTextRegion.text
+        }
+        return selectedCleanedText
+    }
+
+    private var selectedTextPreview: String {
+        selectedTextValue
+    }
+
+}
+
+private struct CaptureDeliveryToastView: View {
+    let toast: CaptureDeliveryToast
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: toast.systemImage)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(iconColor)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(toast.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Text(toast.message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .voltGlassSurface(cornerRadius: 16)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(toast.title). \(toast.message)")
+    }
+
+    private var iconColor: Color {
+        switch toast.tone {
+        case .success:
+            .green
+        case .failure:
+            .red
+        }
+    }
+}

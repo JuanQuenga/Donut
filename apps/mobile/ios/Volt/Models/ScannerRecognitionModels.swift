@@ -1,0 +1,861 @@
+import CoreGraphics
+import Foundation
+@preconcurrency import Vision
+
+struct TextQuadrilateral: Equatable {
+    let topLeft: CGPoint
+    let topRight: CGPoint
+    let bottomRight: CGPoint
+    let bottomLeft: CGPoint
+
+    init(topLeft: CGPoint, topRight: CGPoint, bottomRight: CGPoint, bottomLeft: CGPoint) {
+        self.topLeft = topLeft
+        self.topRight = topRight
+        self.bottomRight = bottomRight
+        self.bottomLeft = bottomLeft
+    }
+
+    var boundingBox: CGRect {
+        let xs = points.map(\.x)
+        let ys = points.map(\.y)
+        guard let minX = xs.min(), let maxX = xs.max(), let minY = ys.min(), let maxY = ys.max() else { return .zero }
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
+    /// The part of this line's quadrilateral covering `range` of `text`, estimated from character
+    /// offsets along the line's own direction so tilted lines slice correctly.
+    func slice(of text: String, range: Range<String.Index>) -> TextQuadrilateral {
+        let total = CGFloat(max(text.count, 1))
+        let start = CGFloat(text.distance(from: text.startIndex, to: range.lowerBound)) / total
+        let end = CGFloat(text.distance(from: text.startIndex, to: range.upperBound)) / total
+        func lerp(_ from: CGPoint, _ to: CGPoint, _ t: CGFloat) -> CGPoint {
+            CGPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t)
+        }
+        return TextQuadrilateral(
+            topLeft: lerp(topLeft, topRight, start),
+            topRight: lerp(topLeft, topRight, end),
+            bottomRight: lerp(bottomLeft, bottomRight, end),
+            bottomLeft: lerp(bottomLeft, bottomRight, start)
+        )
+    }
+
+    init(rect: CGRect) {
+        self.init(
+            topLeft: CGPoint(x: rect.minX, y: rect.maxY),
+            topRight: CGPoint(x: rect.maxX, y: rect.maxY),
+            bottomRight: CGPoint(x: rect.maxX, y: rect.minY),
+            bottomLeft: CGPoint(x: rect.minX, y: rect.minY)
+        )
+    }
+
+    init(observation: VNRectangleObservation) {
+        self.init(
+            topLeft: observation.topLeft,
+            topRight: observation.topRight,
+            bottomRight: observation.bottomRight,
+            bottomLeft: observation.bottomLeft
+        )
+    }
+
+    var points: [CGPoint] {
+        [topLeft, topRight, bottomRight, bottomLeft]
+    }
+}
+
+struct RecognizedTextRegion: Identifiable, Equatable {
+    let id = UUID()
+    let text: String
+    let boundingBox: CGRect
+    let quadrilateral: TextQuadrilateral
+    let confidence: Float
+    let isDeviceIdentifier: Bool
+
+    init(
+        text: String,
+        boundingBox: CGRect,
+        quadrilateral: TextQuadrilateral,
+        confidence: Float,
+        isDeviceIdentifier: Bool = false
+    ) {
+        self.text = text
+        self.boundingBox = boundingBox
+        self.quadrilateral = quadrilateral
+        self.confidence = confidence
+        self.isDeviceIdentifier = isDeviceIdentifier
+    }
+}
+
+enum DeviceIdentifierRegionExtractor {
+    static func reviewRegions(from regions: [RecognizedTextRegion]) -> [RecognizedTextRegion] {
+        let identifierRegions = extractedIdentifierRegions(from: regions)
+        var reviewRegions = deduplicated(identifierRegions)
+        for region in regions {
+            guard !containsEquivalentText(region, in: reviewRegions) else { continue }
+            reviewRegions.append(region)
+        }
+        return reviewRegions.sorted(by: readingOrder)
+    }
+
+    static func extractedIdentifierRegions(from regions: [RecognizedTextRegion]) -> [RecognizedTextRegion] {
+        let labeledIdentifierRegions = deduplicated(
+            regions.filter(\.isDeviceIdentifier)
+                + regions.compactMap { identifierRegion(from: $0, allowingStandalone: false) }
+        )
+        if !labeledIdentifierRegions.isEmpty {
+            return labeledIdentifierRegions
+        }
+
+        let identifierRegions = regions.flatMap(standaloneIdentifierRegions(from:))
+        return identifierRegions.isEmpty ? regions : deduplicated(identifierRegions)
+    }
+
+    /// Regulatory lines often pack several values ("FCC ID 2AYOA-4003 · 4V37W27HC901FB · RW4012"),
+    /// so each identifier found there becomes its own tappable region clipped to its characters.
+    private static func standaloneIdentifierRegions(from region: RecognizedTextRegion) -> [RecognizedTextRegion] {
+        guard LiveTextIdentifierMatcher.isRegulatoryIdentifierContext(region.text) else {
+            return identifierRegion(from: region, allowingStandalone: true).map { [$0] } ?? []
+        }
+        return LiveTextIdentifierMatcher.standaloneMatches(in: region.text).map { match in
+            let quadrilateral = region.quadrilateral.slice(of: region.text, range: match.range)
+            return RecognizedTextRegion(
+                text: match.value,
+                boundingBox: quadrilateral.boundingBox,
+                quadrilateral: quadrilateral,
+                confidence: region.confidence,
+                isDeviceIdentifier: true
+            )
+        }
+    }
+
+    private static func identifierRegion(
+        from region: RecognizedTextRegion,
+        allowingStandalone: Bool
+    ) -> RecognizedTextRegion? {
+        guard let match = LiveTextIdentifierMatcher.match(region.text, allowingStandalone: allowingStandalone) else { return nil }
+        return RecognizedTextRegion(
+            text: match.value,
+            boundingBox: region.boundingBox,
+            quadrilateral: region.quadrilateral,
+            confidence: region.confidence,
+            isDeviceIdentifier: true
+        )
+    }
+
+    private static func deduplicated(_ regions: [RecognizedTextRegion]) -> [RecognizedTextRegion] {
+        var seen = Set<String>()
+        return regions.filter { region in
+            let key = region.text.uppercased()
+            guard !seen.contains(key) else { return false }
+            seen.insert(key)
+            return true
+        }
+    }
+
+    private static func containsEquivalentText(_ region: RecognizedTextRegion, in regions: [RecognizedTextRegion]) -> Bool {
+        regions.contains { existing in
+            existing.text.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(
+                region.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            ) == .orderedSame
+        }
+    }
+
+    private static func readingOrder(_ lhs: RecognizedTextRegion, _ rhs: RecognizedTextRegion) -> Bool {
+        let sameRowThreshold = max(lhs.boundingBox.height, rhs.boundingBox.height) * 0.6
+        if abs(lhs.boundingBox.midY - rhs.boundingBox.midY) <= sameRowThreshold {
+            return lhs.boundingBox.minX < rhs.boundingBox.minX
+        }
+        return lhs.boundingBox.midY > rhs.boundingBox.midY
+    }
+}
+
+enum LiveTextCandidateKind: String, Equatable {
+    case imei = "IMEI"
+    case model = "Model"
+    case serial = "Serial"
+    case sku = "SKU"
+}
+
+struct LiveTextCandidate: Identifiable, Equatable {
+    let id = UUID()
+    let kind: LiveTextCandidateKind
+    let value: String
+    let bounds: CGRect
+    let confidence: Float
+}
+
+struct LiveTextCandidateObservation: Equatable {
+    let kind: LiveTextCandidateKind
+    let value: String
+    let boundingBox: CGRect
+    let confidence: Float
+}
+
+struct LiveTextObservationSnapshot {
+    let text: String
+    let boundingBox: CGRect
+    let confidence: Float
+}
+
+enum LiveTextCandidateObservationExtractor {
+    static func prioritizedCandidates(
+        directCandidates: [LiveTextCandidateObservation],
+        snapshots: [LiveTextObservationSnapshot]
+    ) -> [LiveTextCandidateObservation] {
+        deduplicated(
+            directCandidates
+                + labelAnchoredRowCandidates(in: snapshots)
+                + denseRowCandidates(in: snapshots)
+                + adjacentLabelValueCandidates(in: snapshots)
+        )
+            .sorted { lhs, rhs in
+                if lhs.kind.rawValue != rhs.kind.rawValue {
+                    return lhs.kind.rawValue < rhs.kind.rawValue
+                }
+                return lhs.boundingBox.minY > rhs.boundingBox.minY
+            }
+            .prefix(4)
+            .map { $0 }
+    }
+
+    private static func denseRowCandidates(in snapshots: [LiveTextObservationSnapshot]) -> [LiveTextCandidateObservation] {
+        let ordered = snapshots.sorted { lhs, rhs in
+            if abs(lhs.boundingBox.midY - rhs.boundingBox.midY) > 0.025 {
+                return lhs.boundingBox.midY > rhs.boundingBox.midY
+            }
+            return lhs.boundingBox.minX < rhs.boundingBox.minX
+        }
+        var candidates: [LiveTextCandidateObservation] = []
+
+        for startIndex in ordered.indices {
+            var rowWindow: [LiveTextObservationSnapshot] = []
+            for snapshot in ordered[startIndex...].prefix(8) {
+                if let first = rowWindow.first,
+                   !isSameTextRow(first, snapshot) {
+                    break
+                }
+                rowWindow.append(snapshot)
+                guard rowWindow.count >= 2 else { continue }
+
+                let combinedText = rowWindow.map(\.text).joined(separator: " ")
+                guard let match = LiveTextIdentifierMatcher.match(combinedText, allowingStandalone: false) else { continue }
+                candidates.append(
+                    LiveTextCandidateObservation(
+                        kind: match.kind,
+                        value: match.value,
+                        boundingBox: unionBoundingBox(for: rowWindow),
+                        confidence: rowWindow.map(\.confidence).min() ?? snapshot.confidence
+                    )
+                )
+                break
+            }
+        }
+
+        return candidates
+    }
+
+    private static func labelAnchoredRowCandidates(in snapshots: [LiveTextObservationSnapshot]) -> [LiveTextCandidateObservation] {
+        let ordered = snapshots.sorted { lhs, rhs in
+            if abs(lhs.boundingBox.midY - rhs.boundingBox.midY) > 0.025 {
+                return lhs.boundingBox.midY > rhs.boundingBox.midY
+            }
+            return lhs.boundingBox.minX < rhs.boundingBox.minX
+        }
+        var candidates: [LiveTextCandidateObservation] = []
+
+        for (index, label) in ordered.enumerated() {
+            guard LiveTextIdentifierMatcher.labelKind(in: label.text) != nil else { continue }
+
+            var rowWindow = [label]
+            for value in ordered[(index + 1)...].prefix(8) {
+                guard isSameTextRow(label, value) else { continue }
+                rowWindow.append(value)
+                let combinedText = rowWindow.map(\.text).joined(separator: " ")
+                guard let match = LiveTextIdentifierMatcher.match(combinedText, allowingStandalone: false) else { continue }
+                candidates.append(
+                    LiveTextCandidateObservation(
+                        kind: match.kind,
+                        value: match.value,
+                        boundingBox: unionBoundingBox(for: rowWindow),
+                        confidence: rowWindow.map(\.confidence).min() ?? label.confidence
+                    )
+                )
+                break
+            }
+        }
+
+        return candidates
+    }
+
+    private static func adjacentLabelValueCandidates(in snapshots: [LiveTextObservationSnapshot]) -> [LiveTextCandidateObservation] {
+        let ordered = snapshots.sorted { lhs, rhs in
+            if abs(lhs.boundingBox.midY - rhs.boundingBox.midY) > 0.025 {
+                return lhs.boundingBox.midY > rhs.boundingBox.midY
+            }
+            return lhs.boundingBox.minX < rhs.boundingBox.minX
+        }
+        var candidates: [LiveTextCandidateObservation] = []
+
+        for (index, label) in ordered.enumerated() {
+            guard let kind = LiveTextIdentifierMatcher.labelKind(in: label.text) else { continue }
+            for value in ordered[(index + 1)...].prefix(4) {
+                guard isPlausibleValueObservation(value, near: label) else { continue }
+                guard let candidateValue = LiveTextIdentifierMatcher.standaloneValue(in: value.text, kind: kind) else { continue }
+                candidates.append(
+                    LiveTextCandidateObservation(
+                        kind: kind,
+                        value: candidateValue,
+                        boundingBox: value.boundingBox,
+                        confidence: min(label.confidence, value.confidence)
+                    )
+                )
+                break
+            }
+        }
+
+        return candidates
+    }
+
+    private static func isPlausibleValueObservation(
+        _ value: LiveTextObservationSnapshot,
+        near label: LiveTextObservationSnapshot
+    ) -> Bool {
+        let verticalDistance = abs(label.boundingBox.midY - value.boundingBox.midY)
+        let horizontalOverlap = min(label.boundingBox.maxX, value.boundingBox.maxX) - max(label.boundingBox.minX, value.boundingBox.minX)
+        let sameRow = verticalDistance <= 0.035 && value.boundingBox.minX >= label.boundingBox.minX
+        let nextRow = label.boundingBox.minY >= value.boundingBox.midY && label.boundingBox.minY - value.boundingBox.maxY <= 0.08
+        return sameRow || nextRow || horizontalOverlap > -0.08
+    }
+
+    private static func unionBoundingBox(for snapshots: [LiveTextObservationSnapshot]) -> CGRect {
+        snapshots.dropFirst().reduce(snapshots.first?.boundingBox ?? .zero) { partial, snapshot in
+            partial.union(snapshot.boundingBox)
+        }
+    }
+
+    private static func isSameTextRow(
+        _ lhs: LiveTextObservationSnapshot,
+        _ rhs: LiveTextObservationSnapshot
+    ) -> Bool {
+        let verticalDistance = abs(lhs.boundingBox.midY - rhs.boundingBox.midY)
+        let heightTolerance = max(lhs.boundingBox.height, rhs.boundingBox.height) * 2.2
+        return verticalDistance <= max(0.035, heightTolerance)
+    }
+
+    private static func deduplicated(_ candidates: [LiveTextCandidateObservation]) -> [LiveTextCandidateObservation] {
+        var seen = Set<String>()
+        return candidates.filter { candidate in
+            let key = "\(candidate.kind.rawValue):\(candidate.value.uppercased())"
+            guard !seen.contains(key) else { return false }
+            seen.insert(key)
+            return true
+        }
+    }
+}
+
+enum LiveTextIdentifierMatcher {
+    struct Match {
+        let kind: LiveTextCandidateKind
+        let value: String
+        let range: Range<String.Index>
+    }
+
+    static func match(_ rawText: String) -> Match? {
+        match(rawText, allowingStandalone: true)
+    }
+
+    static func match(_ rawText: String, allowingStandalone: Bool) -> Match? {
+        let text = rawText
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+
+        if let imei = imei(in: text) {
+            return imei
+        }
+        if let serial = labeledValue(in: text, labels: serialLabels, kind: .serial) {
+            return match(kind: .serial, value: serial.value, range: serial.range)
+        }
+        if let model = labeledModelValue(in: text) {
+            return match(kind: .model, value: model.value, range: model.range)
+        }
+        if let sku = labeledValue(in: text, labels: skuLabels, kind: .sku) {
+            return match(kind: .sku, value: sku.value, range: sku.range)
+        }
+        guard allowingStandalone else { return nil }
+        if let standalone = standaloneIdentifier(in: text) {
+            return standalone
+        }
+        return nil
+    }
+
+    static func labelKind(in rawText: String) -> LiveTextCandidateKind? {
+        let text = rawText.lowercased()
+        if text.contains("imei") || text.contains("meid") {
+            return .imei
+        }
+        if containsLabel(in: text, labels: serialLabels) {
+            return .serial
+        }
+        if containsLabel(in: text, labels: modelLabels) {
+            return .model
+        }
+        if containsLabel(in: text, labels: skuLabels) {
+            return .sku
+        }
+        return nil
+    }
+
+    static func standaloneValue(in rawText: String, kind: LiveTextCandidateKind) -> String? {
+        switch kind {
+        case .imei:
+            return validLuhnCandidate(in: rawText)
+        case .model:
+            if let model = modelTokenCandidate(in: rawText) {
+                return normalizedIdentifierValue(model.value, kind: .model)
+            }
+            let cleaned = firstIdentifierToken(in: rawText)
+            guard cleaned.count >= 4,
+                  cleaned.rangeOfCharacter(from: .decimalDigits) != nil,
+                  cleaned.rangeOfCharacter(from: .letters) != nil
+            else { return nil }
+            let model = isKnownModelToken(cleaned) ? normalizedModelToken(cleaned) : cleaned
+            return normalizedIdentifierValue(model, kind: .model)
+        case .serial:
+            let cleaned = firstIdentifierToken(in: rawText)
+            guard cleaned.count >= 4,
+                  cleaned.rangeOfCharacter(from: .decimalDigits) != nil,
+                  cleaned.rangeOfCharacter(from: .letters) != nil
+                    || (cleaned.count >= 6 && cleaned.allSatisfy(\.isNumber))
+            else { return nil }
+            return normalizedIdentifierValue(cleaned, kind: .serial)
+        case .sku:
+            let cleaned = firstIdentifierToken(in: rawText)
+            guard cleaned.count >= 4,
+                  cleaned.rangeOfCharacter(from: .decimalDigits) != nil,
+                  cleaned.rangeOfCharacter(from: .letters) != nil
+            else { return nil }
+            return cleaned
+        }
+    }
+
+    private static func imei(in text: String) -> Match? {
+        guard text.localizedCaseInsensitiveContains("imei") else { return nil }
+        let digits = String(text.filter(\.isNumber))
+        guard digits.count >= 15 else { return nil }
+
+        for offset in 0...(digits.count - 15) {
+            let start = digits.index(digits.startIndex, offsetBy: offset)
+            let end = digits.index(start, offsetBy: 15)
+            let candidate = String(digits[start..<end])
+            guard isValidLuhn(candidate) else { continue }
+
+            var digitIndex = 0
+            var rangeStart: String.Index?
+            var rangeEnd: String.Index?
+            for index in text.indices where text[index].isNumber {
+                if digitIndex == offset {
+                    rangeStart = index
+                }
+                if digitIndex == offset + 14 {
+                    rangeEnd = text.index(after: index)
+                    break
+                }
+                digitIndex += 1
+            }
+            guard let rangeStart, let rangeEnd else { return nil }
+            return Match(kind: .imei, value: candidate, range: rangeStart..<rangeEnd)
+        }
+        return nil
+    }
+
+    private static func validLuhnCandidate(in text: String) -> String? {
+        let digits = String(text.filter(\.isNumber))
+        guard digits.count >= 15 else { return nil }
+
+        for offset in 0...(digits.count - 15) {
+            let start = digits.index(digits.startIndex, offsetBy: offset)
+            let end = digits.index(start, offsetBy: 15)
+            let candidate = String(digits[start..<end])
+            if isValidLuhn(candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
+    private static let serialLabels = ["serial number", "serial no", "serial", "s/n", "s/ n", "s n", "s. n.", "sn"]
+    private static let modelLabels = ["model number", "model no", "model", "mdl"]
+    private static let skuLabels = ["sku", "stock keeping unit"]
+    private static let regulatoryLabels = [
+        "fcc id",
+        "ic",
+        "emc",
+        "r-cmm",
+        "can ices",
+        "ices",
+        "cnc id",
+        "conatel",
+        "anatel",
+        "ict"
+    ]
+
+    private static func labeledValue(
+        in text: String,
+        labels: [String],
+        kind: LiveTextCandidateKind
+    ) -> (value: String, range: Range<String.Index>)? {
+        let lowercased = text.lowercased()
+        guard let labelRange = labels
+            .compactMap({ labelRange(in: lowercased, label: $0) })
+            .min(by: { $0.lowerBound < $1.lowerBound })
+        else { return nil }
+
+        let valueStart = text.index(text.startIndex, offsetBy: lowercased.distance(from: lowercased.startIndex, to: labelRange.upperBound))
+        let suffix = String(text[valueStart...])
+        let cleaned = firstIdentifierToken(in: suffix)
+        if isPlausibleLabeledValue(cleaned, kind: kind),
+           let valueRange = text[valueStart...].range(of: cleaned) {
+            return (cleaned, valueRange)
+        }
+
+        let labelStart = text.index(text.startIndex, offsetBy: lowercased.distance(from: lowercased.startIndex, to: labelRange.lowerBound))
+        return valueBeforeLabel(in: text, labelStart: labelStart, kind: kind)
+    }
+
+    /// Microsoft and some OEM labels print the value first: "250415443948 :Serial Number".
+    /// Only a colon-separated value counts so "Model A3058 Serial" never yields a serial of A3058.
+    private static func valueBeforeLabel(
+        in text: String,
+        labelStart: String.Index,
+        kind: LiveTextCandidateKind
+    ) -> (value: String, range: Range<String.Index>)? {
+        guard let candidate = identifierTokenCandidates(in: text).last(where: { $0.range.upperBound <= labelStart }) else { return nil }
+        let separator = text[candidate.range.upperBound..<labelStart]
+        guard separator.contains(":"),
+              separator.allSatisfy({ $0.isWhitespace || $0 == ":" }),
+              isPlausibleLabeledValue(candidate.value, kind: kind)
+        else { return nil }
+        return candidate
+    }
+
+    private static func labeledModelValue(in text: String) -> (value: String, range: Range<String.Index>)? {
+        let lowercased = text.lowercased()
+        guard let labelRange = modelLabels
+            .compactMap({ labelRange(in: lowercased, label: $0) })
+            .min(by: { $0.lowerBound < $1.lowerBound })
+        else { return nil }
+
+        let valueStart = text.index(text.startIndex, offsetBy: lowercased.distance(from: lowercased.startIndex, to: labelRange.upperBound))
+        let suffix = String(text[valueStart...])
+        if let model = modelTokenCandidate(in: suffix) {
+            let lowerOffset = suffix.distance(from: suffix.startIndex, to: model.range.lowerBound)
+            let upperOffset = suffix.distance(from: suffix.startIndex, to: model.range.upperBound)
+            let lower = text.index(valueStart, offsetBy: lowerOffset)
+            let upper = text.index(valueStart, offsetBy: upperOffset)
+            return (model.value, lower..<upper)
+        }
+
+        return labeledValue(in: text, labels: modelLabels, kind: .model)
+    }
+
+    private static func standaloneIdentifier(in text: String) -> Match? {
+        if isRegulatoryIdentifierContext(text) {
+            let matches = standaloneMatches(in: text)
+            return matches.first(where: { $0.kind == .model }) ?? matches.first
+        }
+        if let model = modelTokenCandidate(in: text) {
+            return match(kind: .model, value: model.value, range: model.range)
+        }
+        let candidates = identifierTokenCandidates(in: text)
+        if let candidate = candidates.first(where: { isKnownModelToken($0.value) }) {
+            return match(kind: .model, value: normalizedModelToken(candidate.value), range: candidate.range)
+        }
+        if let candidate = candidates.first(where: { isLikelySerialToken($0.value) }) {
+            return match(kind: .serial, value: candidate.value, range: candidate.range)
+        }
+        return nil
+    }
+
+    static func isRegulatoryIdentifierContext(_ text: String) -> Bool {
+        containsLabel(in: text.lowercased(), labels: regulatoryLabels)
+    }
+
+    /// All identifiers a single OCR line should offer. A labeled value wins on its own; a
+    /// regulatory line can carry several unlabeled ones; anything else yields at most one.
+    static func identifierMatches(in text: String) -> [Match] {
+        if let labeled = match(text, allowingStandalone: false) {
+            return [labeled]
+        }
+        if isRegulatoryIdentifierContext(text) {
+            return standaloneMatches(in: text)
+        }
+        return match(text).map { [$0] } ?? []
+    }
+
+    /// Every serial and model on a line, in reading order. The value printed right after a
+    /// regulatory label (FCC ID, IC, ANATEL…) is a certification code, never the device's own
+    /// identifier, so only that token is skipped rather than the whole line.
+    static func standaloneMatches(in text: String) -> [Match] {
+        let candidates = identifierTokenCandidates(in: text)
+        let lowercased = text.lowercased()
+        let regulatoryValueStarts: [String.Index] = regulatoryLabels.flatMap { label in
+            labelRanges(in: lowercased, label: label).compactMap { labelRange in
+                let labelEnd = text.index(text.startIndex, offsetBy: lowercased.distance(from: lowercased.startIndex, to: labelRange.upperBound))
+                return candidates.first(where: { $0.range.lowerBound >= labelEnd })?.range.lowerBound
+            }
+        }
+        var seen = Set<String>()
+        return candidates.compactMap { candidate -> Match? in
+            guard !regulatoryValueStarts.contains(candidate.range.lowerBound) else { return nil }
+            let found: Match?
+            if let appleRetailPart = normalizedAppleRetailPartToken(candidate.value) {
+                found = match(kind: .model, value: appleRetailPart, range: candidate.range)
+            } else if isKnownModelToken(candidate.value) {
+                found = match(kind: .model, value: normalizedModelToken(candidate.value), range: candidate.range)
+            } else if isLikelySerialToken(candidate.value) {
+                found = match(kind: .serial, value: candidate.value, range: candidate.range)
+            } else {
+                found = nil
+            }
+            guard let found, seen.insert(found.value).inserted else { return nil }
+            return found
+        }
+    }
+
+    private static func labelRanges(in text: String, label: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var searchStart = text.startIndex
+        while searchStart < text.endIndex,
+              let range = text.range(of: label, range: searchStart..<text.endIndex) {
+            if isLabelBoundary(in: text, before: range.lowerBound) && isLabelBoundary(in: text, after: range.upperBound) {
+                ranges.append(range)
+            }
+            searchStart = range.upperBound
+        }
+        return ranges
+    }
+
+    private static func containsLabel(in text: String, labels: [String]) -> Bool {
+        labels.contains { labelRange(in: text, label: $0) != nil }
+    }
+
+    private static func labelRange(in text: String, label: String) -> Range<String.Index>? {
+        var searchStart = text.startIndex
+        while searchStart < text.endIndex,
+              let range = text.range(of: label, range: searchStart..<text.endIndex) {
+            if isLabelBoundary(in: text, before: range.lowerBound) && isLabelBoundary(in: text, after: range.upperBound) {
+                return range
+            }
+            searchStart = range.upperBound
+        }
+        return nil
+    }
+
+    private static func isLabelBoundary(in text: String, before index: String.Index) -> Bool {
+        guard index > text.startIndex else { return true }
+        let previous = text[text.index(before: index)]
+        return !previous.isLetter && !previous.isNumber
+    }
+
+    private static func isLabelBoundary(in text: String, after index: String.Index) -> Bool {
+        guard index < text.endIndex else { return true }
+        let next = text[index]
+        return !next.isLetter && !next.isNumber
+    }
+
+    private static func firstIdentifierToken(in text: String) -> String {
+        identifierTokenCandidates(in: text).first?.value ?? ""
+    }
+
+    private static func identifierTokenCandidates(in text: String) -> [(value: String, range: Range<String.Index>)] {
+        text
+            .split(whereSeparator: { $0.isWhitespace || $0 == ":" || isOCRNoise($0) })
+            .compactMap { rawToken -> (value: String, range: Range<String.Index>)? in
+                let value = String(rawToken).trimmingCharacters(in: identifierTokenTrimCharacters)
+                guard !value.isEmpty,
+                      let range = text[rawToken.startIndex..<rawToken.endIndex].range(of: value)
+                else { return nil }
+                return (value, range)
+            }
+    }
+
+    private static let identifierTokenTrimCharacters = CharacterSet(charactersIn: " #:=-{}[](),.;|*")
+
+    /// Identifiers are ASCII, so accented letters (e.g. "ŘŚ" read from label scratches) end a token.
+    /// Ø is kept because slashed-zero label fonts OCR as Ø.
+    private static func isOCRNoise(_ character: Character) -> Bool {
+        !character.isASCII && !slashedZeros.contains(character)
+    }
+
+    private static let slashedZeros: Set<Character> = ["Ø", "ø"]
+
+    private static func modelTokenCandidate(in text: String) -> (value: String, range: Range<String.Index>)? {
+        let candidates = identifierTokenCandidates(in: text)
+        for (index, candidate) in candidates.enumerated() {
+            if let appleRetailPart = normalizedAppleRetailPartToken(candidate.value) {
+                return (appleRetailPart, candidate.range)
+            }
+            let normalized = normalizedModelToken(candidate.value)
+            if isKnownModelToken(normalized) {
+                return (normalized, candidate.range)
+            }
+
+            guard index + 1 < candidates.count else { continue }
+            let next = candidates[index + 1]
+            if let combined = combinedModelToken(prefix: candidate.value, suffix: next.value) {
+                return (combined, candidate.range.lowerBound..<next.range.upperBound)
+            }
+        }
+        return nil
+    }
+
+    private static func combinedModelToken(prefix: String, suffix: String) -> String? {
+        let normalizedPrefix = normalizedModelPrefix(prefix)
+        let cleanedSuffix = suffix.trimmingCharacters(in: identifierTokenTrimCharacters).uppercased()
+        guard let normalizedPrefix,
+              cleanedSuffix.count >= 2,
+              cleanedSuffix.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" })
+        else { return nil }
+
+        let combined = normalizedPrefix + cleanedSuffix
+        return isKnownModelToken(combined) ? combined : nil
+    }
+
+    private static func isKnownModelToken(_ value: String) -> Bool {
+        let uppercased = normalizedModelToken(value)
+        if isRayBanMetaModelToken(uppercased) {
+            return true
+        }
+        guard uppercased.hasPrefix("CFI-"),
+              uppercased.count >= 7,
+              uppercased.count <= 20
+        else { return false }
+        return uppercased.allSatisfy { character in
+            character.isLetter || character.isNumber || character == "-"
+        }
+    }
+
+    /// Ray-Ban Meta glasses print their model as RW followed by four digits (RW4006, RW4012).
+    private static func isRayBanMetaModelToken(_ value: String) -> Bool {
+        value.count == 6 && value.hasPrefix("RW") && value.dropFirst(2).allSatisfy(\.isNumber)
+    }
+
+    private static func normalizedAppleRetailPartToken(_ value: String) -> String? {
+        let uppercased = value.uppercased()
+        let parts = uppercased.split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return nil }
+
+        let prefix = parts[0]
+        let suffix = parts[1]
+        guard (5...12).contains(prefix.count),
+              (1...3).contains(suffix.count),
+              let first = prefix.first,
+              "MNFP".contains(first),
+              prefix.allSatisfy({ $0.isLetter || $0.isNumber }),
+              prefix.contains(where: \.isLetter),
+              prefix.contains(where: \.isNumber),
+              suffix.allSatisfy(\.isLetter)
+        else { return nil }
+        return uppercased
+    }
+
+    private static func normalizedModelToken(_ value: String) -> String {
+        let uppercased = value.uppercased()
+        if uppercased.hasPrefix("CF1-") || uppercased.hasPrefix("CFL-") {
+            return "CFI-" + String(uppercased.dropFirst(4))
+        }
+        if uppercased.hasPrefix("CF1") || uppercased.hasPrefix("CFL") {
+            return "CFI-" + String(uppercased.dropFirst(3)).trimmingCharacters(in: identifierTokenTrimCharacters)
+        }
+        if uppercased.hasPrefix("CFI") && !uppercased.hasPrefix("CFI-") {
+            let suffix = String(uppercased.dropFirst(3)).trimmingCharacters(in: identifierTokenTrimCharacters)
+            if !suffix.isEmpty {
+                return "CFI-" + suffix
+            }
+        }
+        return uppercased
+    }
+
+    private static func normalizedModelPrefix(_ value: String) -> String? {
+        let uppercased = value.uppercased().trimmingCharacters(in: identifierTokenTrimCharacters)
+        if uppercased == "CFI" || uppercased == "CF1" || uppercased == "CFL" {
+            return "CFI-"
+        }
+        return nil
+    }
+
+    private static func isLikelySerialToken(_ value: String) -> Bool {
+        guard value.count >= 10, value.count <= 24 else { return false }
+        let digitCount = value.filter { $0.isNumber || $0 == "O" || $0 == "o" || slashedZeros.contains($0) }.count
+        let letterCount = value.filter(\.isLetter).count
+        guard value.allSatisfy({ character in
+            character.isLetter || character.isNumber || character == "-"
+        }) else { return false }
+        return (digitCount >= 6 && letterCount >= 1) || isLikelyRandomizedSerialToken(value)
+    }
+
+    /// Apple's 2021+ serials are 10 random uppercase characters (e.g. HJTYWGYQ90, C0WGWK95H4),
+    /// so they rarely carry six digits. Real digits are required so words like BLOOMINGTON stay prose.
+    private static func isLikelyRandomizedSerialToken(_ value: String) -> Bool {
+        guard (10...12).contains(value.count),
+              value.allSatisfy({ $0.isASCII && ($0.isUppercase || $0.isNumber) })
+        else { return false }
+        return value.filter(\.isNumber).count >= 2 && value.filter(\.isLetter).count >= 3
+    }
+
+    private static func isPlausibleLabeledValue(_ value: String, kind: LiveTextCandidateKind) -> Bool {
+        guard value.count >= 4,
+              value.rangeOfCharacter(from: .alphanumerics) != nil
+        else { return false }
+        switch kind {
+        case .serial:
+            guard value.contains(where: \.isNumber) else { return false }
+            return value.contains(where: \.isLetter)
+                || (value.count >= 6 && value.allSatisfy(\.isNumber))
+        case .model:
+            return value.contains(where: \.isNumber)
+        case .imei, .sku:
+            return true
+        }
+    }
+
+    private static func match(
+        kind: LiveTextCandidateKind,
+        value: String,
+        range: Range<String.Index>
+    ) -> Match {
+        Match(kind: kind, value: normalizedIdentifierValue(value, kind: kind), range: range)
+    }
+
+    private static func normalizedIdentifierValue(_ value: String, kind: LiveTextCandidateKind) -> String {
+        switch kind {
+        case .serial:
+            return replacingAmbiguousZeros(in: value)
+        case .model:
+            let uppercased = value.uppercased()
+            guard uppercased.hasSuffix("OC") || uppercased.hasSuffix("OG") else {
+                return replacingAmbiguousZeros(in: value)
+            }
+            return replacingAmbiguousZeros(in: String(value.dropLast(2))) + String(value.suffix(2))
+        case .imei, .sku:
+            return value
+        }
+    }
+
+    private static func replacingAmbiguousZeros(in value: String) -> String {
+        String(value.map { character in
+            character == "O" || character == "o" || slashedZeros.contains(character) ? "0" : character
+        })
+    }
+
+    private static func isValidLuhn(_ value: String) -> Bool {
+        let digits = value.compactMap(\.wholeNumberValue)
+        guard digits.count == value.count else { return false }
+
+        let checksum = digits.reversed().enumerated().reduce(0) { total, item in
+            let (index, digit) = item
+            guard index.isMultiple(of: 2) == false else { return total + digit }
+            let doubled = digit * 2
+            return total + (doubled > 9 ? doubled - 9 : doubled)
+        }
+        return checksum.isMultiple(of: 10)
+    }
+}

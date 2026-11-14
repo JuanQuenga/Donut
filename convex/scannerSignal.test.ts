@@ -1,0 +1,458 @@
+import { convexTest } from "convex-test";
+import { afterEach, describe, expect, test, vi } from "vitest";
+
+import { internal } from "./_generated/api";
+import schema from "./schema";
+import { logReconnectWakePushResult } from "./scannerPush";
+import {
+  logScannerSignalEvent,
+  scannerSignalIdTail,
+  scannerSignalRouteTemplate,
+} from "./scannerSignal/logging";
+import { executeScannerSignalRendezvous } from "./scannerSignal/rendezvous";
+import { signalRouteCommand } from "./scannerSignal/routeCommands";
+
+const modules = import.meta.glob("./**/*.ts");
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("scanner signal logging", () => {
+  test("redacts ids to tails and logs route templates", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    expect(scannerSignalIdTail("abcdefghijklmnopqrstuvwxyzABCDEF123456")).toBe("EF123456");
+    expect(scannerSignalRouteTemplate("postJoinOffer")).toBe("/api/signal/join-token/:token/attempt/:attemptId/offer");
+
+    logScannerSignalEvent("offer_posted", {
+      route: scannerSignalRouteTemplate("postJoinOffer"),
+      command: "postJoinOffer",
+      statusCode: 200,
+      elapsedMs: 12,
+      tokenTail: scannerSignalIdTail("abcdefghijklmnopqrstuvwxyzABCDEF123456"),
+      attemptIdTail: scannerSignalIdTail("join_attempt_12345"),
+    });
+
+    expect(info).toHaveBeenCalledWith(
+      "[Volt Scanner Signal]",
+      expect.objectContaining({
+        event: "offer_posted",
+        route: "/api/signal/join-token/:token/attempt/:attemptId/offer",
+        command: "postJoinOffer",
+        statusCode: 200,
+        elapsedMs: 12,
+        tokenTail: "EF123456",
+        attemptIdTail: "pt_12345",
+      }),
+    );
+    expect(JSON.stringify(info.mock.calls)).not.toContain("abcdefghijklmnopqrstuvwxyzABCDEF123456");
+  });
+
+  test("logs reconnect push failures without full ids", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    logReconnectWakePushResult({
+      sent: false,
+      pairingId: "pairing_test_12345",
+      requestId: "reconnect_request_12345",
+      reason: "send_failed",
+      pushStatusCode: 410,
+      elapsedMs: 34,
+    });
+
+    expect(warn).toHaveBeenCalledWith(
+      "[Volt Scanner Signal]",
+      expect.objectContaining({
+        event: "push_wake_failed",
+        route: "/api/signal/pairings/:pairingId/reconnect",
+        command: "createReconnectRequest",
+        pairingIdTail: "st_12345",
+        requestIdTail: "st_12345",
+        reason: "send_failed",
+        pushStatusCode: 410,
+        elapsedMs: 34,
+      }),
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("pairing_test_12345");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("reconnect_request_12345");
+  });
+});
+
+describe("scanner signal route command extraction", () => {
+  test.each([
+    ["POST", ["join-token"], "createJoinToken"],
+    ["POST", ["join-token", "token", "session-ready"], "sessionReady"],
+    ["GET", ["join-token", "token"], "getJoinTokenStatus"],
+    ["POST", ["join-token", "token", "revoke"], "revokeJoinToken"],
+    ["POST", ["join-token", "token", "rotate"], "rotateJoinToken"],
+    ["GET", ["join-token", "token", "attempts"], "listJoinAttempts"],
+    ["POST", ["join-token", "token", "attempt"], "createJoinAttempt"],
+    ["POST", ["join-token", "token", "attempt", "attempt-id", "offer"], "postJoinOffer"],
+    ["GET", ["join-token", "token", "attempt", "attempt-id", "offer"], "getJoinOffer"],
+    ["POST", ["join-token", "token", "attempt", "attempt-id", "answer"], "postJoinAnswer"],
+    ["GET", ["join-token", "token", "attempt", "attempt-id", "answer"], "getJoinAnswer"],
+    ["POST", ["pairings"], "registerPairing"],
+    ["GET", ["pairings", "reconnect-requests"], "getPendingReconnectRequests"],
+    ["POST", ["pairings", "pairing-id", "reconnect"], "createReconnectRequest"],
+    ["GET", ["pairings", "pairing-id", "reconnect", "request-id"], "getReconnectRequestStatus"],
+    ["POST", ["pairings", "pairing-id", "reconnect", "request-id", "join-window"], "postReconnectJoinWindow"],
+    ["GET", ["ice-servers"], "getIceServers"],
+    ["GET", ["push", "public-key"], "getPushPublicKey"],
+  ] as const)("maps %s /%s to %s", (method, parts, command) => {
+    expect(signalRouteCommand(method, [...parts])).toBe(command);
+  });
+
+  test.each([
+    ["GET", ["join-token"]],
+    ["POST", ["join-token", "token", "attempt", "attempt-id", "candidate"]],
+    ["POST", ["pairings", "reconnect-requests"]],
+    ["POST", ["pairings", "pairing-id", "reconnect", "request-id"]],
+    ["POST", ["ice-servers"]],
+    ["GET", ["push", "public-key", "extra"]],
+  ] as const)("maps unsupported %s /%s to notFound", (method, parts) => {
+    expect(signalRouteCommand(method, [...parts])).toBe("notFound");
+  });
+});
+
+describe("scanner signal rendezvous module", () => {
+  test("schedules reconnect wake push without blocking the request response", async () => {
+    const ctx = {
+      runMutation: vi.fn(async () => ({
+        statusCode: 200,
+        body: {
+          request: { id: "reconnect_request_12345" },
+          pushSubscription: {
+            endpoint: "https://push.example.test/subscription",
+            keys: { auth: "auth", p256dh: "p256dh" },
+          },
+        },
+      })),
+      scheduler: {
+        runAfter: vi.fn(async () => "scheduled_push"),
+      },
+    };
+
+    const result = await executeScannerSignalRendezvous(ctx as never, {
+      command: "createReconnectRequest",
+      parts: ["pairings", "pairing_test_12345", "reconnect"],
+      body: {},
+      origin: "https://example.test",
+      startedAt: Date.now(),
+      auth: {},
+      pairingSecret: "pairing-secret",
+    });
+
+    expect(result).toEqual({
+      statusCode: 200,
+      body: { request: { id: "reconnect_request_12345" } },
+    });
+    expect(ctx.scheduler.runAfter).toHaveBeenCalledWith(
+      0,
+      internal.scannerPush.sendReconnectWakePush,
+      expect.objectContaining({
+        pairingId: "pairing_test_12345",
+        requestId: "reconnect_request_12345",
+      }),
+    );
+  });
+
+  test("maps create join attempt requests to the internal mutation contract", async () => {
+    const calls: Array<{ fn: unknown; args: unknown }> = [];
+    const ctx = {
+      runMutation: vi.fn(async (fn, args) => {
+        calls.push({ fn, args });
+        return { statusCode: 200, body: { attempt: { id: args.attemptId } } };
+      }),
+    };
+
+    const result = await executeScannerSignalRendezvous(ctx as never, {
+      command: "createJoinAttempt",
+      parts: ["join-token", "join-token-123", "attempt"],
+      body: {
+        contributorId: "phone-device",
+        deviceLabel: "Juan's iPhone",
+        protocolVersion: "1.0.0",
+        capabilities: ["ocr", "barcode", "dictation", "photo"],
+        attemptTtlMs: 30_000,
+      },
+      origin: "https://example.test",
+      startedAt: Date.now(),
+      auth: {},
+    });
+
+    expect(result).toMatchObject({ statusCode: 200 });
+    expect(ctx.runMutation).toHaveBeenCalledTimes(1);
+    expect(calls[0].args).toMatchObject({
+      token: "join-token-123",
+      contributorId: "phone-device",
+      deviceLabel: "Juan's iPhone",
+      protocolVersion: "1.0.0",
+      capabilities: ["ocr", "barcode", "dictation", "photo"],
+      attemptTtlMs: 30_000,
+    });
+    expect((calls[0].args as { attemptId?: string }).attemptId).toEqual(expect.any(String));
+  });
+
+  test("validates reconnect join window body before calling mutations", async () => {
+    const ctx = {
+      runMutation: vi.fn(),
+    };
+
+    const result = await executeScannerSignalRendezvous(ctx as never, {
+      command: "postReconnectJoinWindow",
+      parts: ["pairings", "pairing-1", "reconnect", "request-1", "join-window"],
+      body: {
+        joinUrl: "https://example.test/api/signal/join-token/token",
+        joinToken: "token",
+      },
+      origin: "https://example.test",
+      startedAt: Date.now(),
+      auth: {},
+      pairingSecret: "secret",
+    });
+
+    expect(result).toEqual({ statusCode: 400, body: { error: "Invalid join window" } });
+    expect(ctx.runMutation).not.toHaveBeenCalled();
+  });
+
+  test("rejects join-token creation before writing signaling state when access is unauthorized", async () => {
+    const ctx = {
+      runMutation: vi.fn(async () => ({
+        statusCode: 401,
+        body: { error: "Authentication or anonymous trial credentials required" },
+      })),
+    };
+
+    const result = await executeScannerSignalRendezvous(ctx as never, {
+      command: "createJoinToken",
+      parts: ["join-token"],
+      body: { sessionId: "browser-session", usageSessionId: "usage-session" },
+      origin: "https://example.test",
+      startedAt: Date.now(),
+      auth: {},
+    });
+
+    expect(result).toEqual({
+      statusCode: 401,
+      body: { error: "Authentication or anonymous trial credentials required" },
+    });
+    expect(ctx.runMutation).toHaveBeenCalledTimes(1);
+  });
+
+  test("embeds a session-bound guest cloud grant only for a signed-in Chrome owner", async () => {
+    const ctx = {
+      runMutation: vi.fn()
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          body: { isAuthorized: true },
+          owner: { clerkUserId: "user-123" },
+        })
+        .mockResolvedValueOnce({
+          token: "abcdefghijklmnopqrstuvwxyzABCDEF",
+          sessionId: "browser-session",
+          expiresAt: "2026-07-22T21:00:00.000Z",
+        })
+        .mockResolvedValueOnce({
+          guestCloudGrant: "guest-cloud-secret",
+          expiresAt: 1_800_000_000_000,
+        }),
+    };
+
+    const result = await executeScannerSignalRendezvous(ctx as never, {
+      command: "createJoinToken",
+      parts: ["join-token"],
+      body: { sessionId: "browser-session", usageSessionId: "usage-session" },
+      origin: "https://example.test",
+      startedAt: Date.now(),
+      auth: { clerkUserId: "user-123", tokenIdentifier: "token-123" },
+    });
+
+    const qrCodeUrl = (result.body as { qrCodeUrl: string }).qrCodeUrl;
+    const url = new URL(qrCodeUrl);
+    expect(url.searchParams.get("guestCloudGrant")).toBe("guest-cloud-secret");
+    expect(url.searchParams.get("guestCloudExpiresAt")).toBe("1800000000000");
+    expect(ctx.runMutation).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("scanner signal Convex lifecycle", () => {
+  test("creates a token, exchanges offer and answer, registers pairing, reconnects, and cleans up expiry", async () => {
+    const t = convexTest(schema, modules);
+    const origin = "https://adorable-hornet-19.convex.site";
+
+    const created = await t.mutation(internal.scannerSignal.joinTokens.createJoinToken, {
+      token: "abcdefghijklmnopqrstuvwxyzABCDEF123456",
+      sessionId: "global-session-1",
+      browserClaim: "browser-secret",
+      ttlMs: 120_000,
+      graceMs: 10_000,
+      origin,
+    });
+
+    expect(created).toMatchObject({
+      token: "abcdefghijklmnopqrstuvwxyzABCDEF123456",
+      sessionId: "global-session-1",
+      browserClaim: "browser-secret",
+      joinUrl: `${origin}/api/signal/join-token/abcdefghijklmnopqrstuvwxyzABCDEF123456`,
+    });
+
+    const attempt = await t.mutation(internal.scannerSignal.joinAttempts.createJoinAttempt, {
+      token: created.token,
+      attemptId: "join_attempt_12345",
+      contributorId: "device_1234",
+      deviceLabel: "iPhone",
+      protocolVersion: "1.0.0",
+      capabilities: ["ocr", "barcode", "dictation", "photo"],
+    });
+
+    expect(attempt.statusCode).toBe(200);
+    if ("error" in attempt.body) throw new Error(attempt.body.error);
+    expect(attempt.body.attempt).toMatchObject({
+      id: "join_attempt_12345",
+      status: "waiting_for_offer",
+      contributorId: "device_1234",
+      hasOffer: false,
+      hasAnswer: false,
+    });
+
+    const offer = JSON.stringify({ type: "offer", sdp: "offer-sdp" });
+    const postedOffer = await t.mutation(internal.scannerSignal.joinAttempts.postJoinOffer, {
+      token: created.token,
+      attemptId: "join_attempt_12345",
+      browserClaim: "browser-secret",
+      offer,
+    });
+    expect(postedOffer.body.attempt?.status).toBe("offer_posted");
+
+    const fetchedOffer = await t.mutation(internal.scannerSignal.joinAttempts.getJoinOffer, {
+      token: created.token,
+      attemptId: "join_attempt_12345",
+    });
+    expect(fetchedOffer.body.offer).toBe(offer);
+
+    const answer = JSON.stringify({ type: "answer", sdp: "answer-sdp" });
+    const postedAnswer = await t.mutation(internal.scannerSignal.joinAttempts.postJoinAnswer, {
+      token: created.token,
+      attemptId: "join_attempt_12345",
+      answer,
+    });
+    expect(postedAnswer.body.attempt?.status).toBe("answer_posted");
+
+    const fetchedAnswer = await t.mutation(internal.scannerSignal.joinAttempts.getJoinAnswer, {
+      token: created.token,
+      attemptId: "join_attempt_12345",
+      browserClaim: "browser-secret",
+    });
+    expect(fetchedAnswer.body.answer).toBe(answer);
+
+    const pairingId = "pairing_test_12345";
+    const pairingSecret = "abcdefghijklmnopqrstuvwxyzABCDEFGH123456";
+    const browserSessionId = "global-session-reconnect";
+
+    const pairing = await t.mutation(internal.scannerSignal.pairings.registerPairing, {
+      pairingId,
+      pairingSecret,
+      browserSessionId,
+      displayName: "Chrome on Mac",
+      phoneDeviceId: "phone_1234",
+      phoneLabel: "Juan's iPhone",
+    });
+    expect(pairing.body).toMatchObject({ pairingId, browserSessionId, displayName: "Chrome on Mac" });
+
+    const reconnect = await t.mutation(internal.scannerSignal.reconnectRequests.createReconnectRequest, {
+      pairingId,
+      pairingSecret,
+      requestId: "reconnect_request_12345",
+    });
+    expect(reconnect.body.request).toMatchObject({
+      id: "reconnect_request_12345",
+      status: "waiting_for_browser",
+    });
+
+    const pending = await t.mutation(internal.scannerSignal.reconnectRequests.getPendingReconnectRequests, {
+      browserSessionId,
+    });
+    expect(pending.body.requests).toEqual([
+      expect.objectContaining({
+        pairingId,
+        requestId: "reconnect_request_12345",
+        browserSessionId,
+      }),
+    ]);
+
+    const joinWindow = await t.mutation(internal.scannerSignal.reconnectRequests.postReconnectJoinWindow, {
+      pairingId,
+      requestId: "reconnect_request_12345",
+      pairingSecret,
+      joinUrl: `${origin}/api/signal/join-token/${created.token}`,
+      joinToken: created.token,
+      sessionId: browserSessionId,
+    });
+    expect(joinWindow.body.request).toMatchObject({
+      id: "reconnect_request_12345",
+      status: "join_window_ready",
+      joinToken: created.token,
+      sessionId: browserSessionId,
+    });
+
+    const oldPairingId = "pairing_old_phone_12345";
+    const oldPairingSecret = "oldabcdefghijklmnopqrstuvwxyzABCDEFGH";
+    const currentPairingId = "pairing_current_12345";
+    const currentPairingSecret = "currentabcdefghijklmnopqrstuvwxyzABC";
+    await t.mutation(internal.scannerSignal.pairings.registerPairing, {
+      pairingId: oldPairingId,
+      pairingSecret: oldPairingSecret,
+      browserSessionId,
+      displayName: "Chrome on Mac",
+      phoneDeviceId: "phone_old",
+      phoneLabel: "Juan's iPhone",
+    });
+    await t.mutation(internal.scannerSignal.pairings.registerPairing, {
+      pairingId: currentPairingId,
+      pairingSecret: currentPairingSecret,
+      browserSessionId,
+      displayName: "Chrome on Mac",
+      phoneDeviceId: "phone_current",
+      phoneLabel: "Juan's iPhone",
+    });
+    await t.mutation(internal.scannerSignal.reconnectRequests.createReconnectRequest, {
+      pairingId: oldPairingId,
+      pairingSecret: oldPairingSecret,
+      requestId: "reconnect_request_old_pairing",
+    });
+    const fallbackJoinWindow = await t.mutation(internal.scannerSignal.reconnectRequests.postReconnectJoinWindow, {
+      pairingId: oldPairingId,
+      requestId: "reconnect_request_old_pairing",
+      answeringPairingId: currentPairingId,
+      pairingSecret: currentPairingSecret,
+      joinUrl: `${origin}/api/signal/join-token/${created.token}`,
+      joinToken: created.token,
+      sessionId: browserSessionId,
+    });
+    expect(fallbackJoinWindow.body.request).toMatchObject({
+      id: "reconnect_request_old_pairing",
+      status: "join_window_ready",
+      joinToken: created.token,
+      sessionId: browserSessionId,
+    });
+
+    const shortLived = await t.mutation(internal.scannerSignal.joinTokens.createJoinToken, {
+      token: "shortlivedtokenabcdefghijklmnopqrstuvwxyz",
+      sessionId: "global-session-expiring",
+      ttlMs: 1,
+      graceMs: 0,
+      origin,
+    });
+    expect(shortLived.token).toBe("shortlivedtokenabcdefghijklmnopqrstuvwxyz");
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const cleanup = await t.mutation(internal.scannerSignal.cleanup.cleanupExpired, {});
+    expect(cleanup.deleted).toBeGreaterThan(0);
+
+    const expiredLookup = await t.mutation(internal.scannerSignal.joinTokens.getJoinTokenStatus, {
+      token: "shortlivedtokenabcdefghijklmnopqrstuvwxyz",
+    });
+    expect(expiredLookup).toEqual({ statusCode: 404, body: { error: "Join token not found" } });
+  });
+});

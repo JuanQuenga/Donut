@@ -1,0 +1,184 @@
+name: Publish Chrome Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit_existing_draft:
+        description: Submit the package already uploaded to Chrome without building or uploading another version
+        required: true
+        type: boolean
+        default: false
+      submit_for_review:
+        description: Submit the uploaded package for Chrome review
+        required: true
+        type: boolean
+        default: true
+      publish_type:
+        description: Publish immediately after approval or stage it
+        required: true
+        type: choice
+        default: DEFAULT_PUBLISH
+        options:
+          - DEFAULT_PUBLISH
+          - STAGED_PUBLISH
+      replace_pending_submission:
+        description: Cancel and replace the current pending review
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: chrome-web-store-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    name: Upload or submit
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment: chrome-web-store
+
+    steps:
+      - name: Checkout release ref
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Enable pinned pnpm
+        run: corepack enable && corepack install
+
+      - name: Cache pnpm
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release tooling
+        run: pnpm --filter @volt/extension test:release
+
+      - name: Test extension
+        run: pnpm --filter @volt/extension test:scanner
+
+      - name: Typecheck extension
+        run: pnpm --filter @volt/extension compile
+
+      - name: Authenticate to Google Cloud
+        id: google_auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      - name: Release Chrome extension
+        env:
+          CWS_ACCESS_TOKEN: ${{ steps.google_auth.outputs.access_token }}
+          CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          WXT_CLERK_PUBLISHABLE_KEY: ${{ vars.WXT_CLERK_PUBLISHABLE_KEY }}
+          WXT_EXTENSION_PUBLIC_KEY: ${{ vars.WXT_EXTENSION_PUBLIC_KEY }}
+          # Unset keeps Chrome profile sign-in and its identity permissions off.
+          WXT_GOOGLE_CHROME_EXTENSION_CLIENT_ID: ${{ vars.WXT_GOOGLE_CHROME_EXTENSION_CLIENT_ID }}
+          SUBMIT_EXISTING_DRAFT: ${{ inputs.submit_existing_draft }}
+          SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
+          PUBLISH_TYPE: ${{ inputs.publish_type }}
+          REPLACE_PENDING_SUBMISSION: ${{ inputs.replace_pending_submission }}
+        run: |
+          release_args=("--publish-type=${PUBLISH_TYPE}")
+          if [[ "${SUBMIT_EXISTING_DRAFT}" == "true" ]]; then
+            if [[ "${SUBMIT_FOR_REVIEW}" != "true" ]]; then
+              echo "submit_for_review must be true when submitting an existing draft" >&2
+              exit 1
+            fi
+            if [[ "${REPLACE_PENDING_SUBMISSION}" == "true" ]]; then
+              echo "replace_pending_submission cannot be used when submitting an existing draft" >&2
+              exit 1
+            fi
+            pnpm --filter @volt/extension exec node scripts/chrome-web-store.mjs submit-existing-draft "${release_args[@]}"
+            exit 0
+          fi
+          if [[ "${SUBMIT_FOR_REVIEW}" != "true" ]]; then
+            release_args+=("--upload-only")
+          fi
+          if [[ "${REPLACE_PENDING_SUBMISSION}" == "true" ]]; then
+            release_args+=("--replace-pending")
+          fi
+          pnpm release:extension -- "${release_args[@]}"
+
+      - name: Retain release zip
+        if: ${{ always() && inputs.submit_existing_draft == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: volt-chrome-extension
+          path: packages/extension/.output/volt-extension-*-chrome.zip
+          if-no-files-found: error
+          include-hidden-files: true
+
+      # Every uploaded build also lands in GitHub Releases as a prerelease, so it can be
+      # loaded unpacked for testing before the Chrome Web Store approves it.
+      # Non-fatal: the store submission already happened, so a GitHub hiccup here must not
+      # make the run look like a failed release (and invite a --replace-pending rerun).
+      - name: Attach build to GitHub release
+        if: ${{ success() && inputs.submit_existing_draft == false }}
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
+        run: |
+          zip="$(ls packages/extension/.output/volt-extension-*-chrome.zip | head -n 1)"
+          version="$(basename "$zip" | sed -E 's/^volt-extension-(.+)-chrome\.zip$/\1/')"
+          tag="v${version}"
+          if [[ "${SUBMIT_FOR_REVIEW}" == "true" ]]; then
+            state="in Chrome Web Store review"
+          else
+            state="uploaded to the Chrome Web Store, not submitted"
+          fi
+          notes="${RUNNER_TEMP}/release-notes.md"
+          cat > "$notes" <<NOTES
+          Donut Chrome extension **${version}**, ${state}. This is the exact zip uploaded to the Chrome Web Store.
+
+          ## Load it for testing
+          The zip keeps the Web Store extension ID, so Donut sign-in works. Chrome can't run two copies with the same ID:
+          1. In \`chrome://extensions\`, remove the Web Store copy of Donut. Data stored only on that computer is cleared; account data comes back after signing in.
+          2. Unzip \`$(basename "$zip")\` into a folder you'll keep.
+          3. Turn on **Developer mode**, click **Load unpacked**, and pick that folder.
+
+          An unpacked copy never updates itself. Once the Web Store approves this version, remove it and reinstall Donut from the Web Store.
+
+          Built from ${GITHUB_SHA} by run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}.
+          NOTES
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # A rerun for the same version: point the tag at this build and refresh the
+            # title, notes, and zip so the release describes what was actually uploaded.
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release edit "$tag" --title "Donut extension ${version} (${state})" --notes-file "$notes"
+            gh release upload "$tag" "$zip" --clobber
+          else
+            gh release create "$tag" "$zip" --prerelease --target "$GITHUB_SHA" \
+              --title "Donut extension ${version} (${state})" --notes-file "$notes"
+          fi
+
+      - name: Persist accepted version
+        if: always()
+        run: |
+          if git diff --quiet -- packages/extension/package.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/extension/package.json
+          git commit -m "Auto-bump Chrome extension version [skip ci]"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

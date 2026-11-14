@@ -1,0 +1,755 @@
+import type { ErrorInfo, ReactNode } from "react";
+import {
+  Component,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  ClerkLoaded,
+  ClerkLoading,
+  ClerkProvider,
+  OrganizationSwitcher,
+  SignIn,
+  UserButton,
+  useAuth,
+  useClerk,
+  useOrganization,
+  useUser,
+} from "@clerk/chrome-extension";
+import {
+  Building2,
+  ExternalLink,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
+import {
+  parseExtensionAccessStatus,
+  type ExtensionAccessStatus,
+} from "../../access/access-contract";
+import { CHROME_PROFILE_AUTH_ENABLED, PROFILE_AUTH_EVENT_KEY } from "../../access/chrome-profile-auth";
+import { CLERK_CLIENT_JWT_CACHE_KEY } from "../../access/clerk-client-jwt";
+import {
+  CLERK_PUBLISHABLE_KEY,
+  CLERK_SIGN_IN_URL,
+  CLERK_SYNC_HOST,
+} from "../../access/config";
+import { cn } from "../../lib/utils";
+import "./ExtensionAccess.css";
+
+type AccessSurface = "popup" | "sidepanel";
+type AccountControlSurface = "newtab" | "sidepanel";
+// Extension pages that host the shared Clerk session and return there after sign-in.
+type ClerkHostPage = "/sidepanel.html" | "/handbook.html";
+// null while Clerk is still loading — the panel must not claim a signed-out
+// account before it knows one way or the other.
+const SidepanelAuthContext = createContext<boolean | null>(null);
+const SidepanelUserContext = createContext<string | null>(null);
+
+function accountControlClassName(
+  surface: AccountControlSurface,
+  state: string,
+) {
+  return `${surface}-account-control ${state}`;
+}
+
+function isClerkReturnUrl(value: string | undefined) {
+  if (!value) return false;
+  try {
+    const origin = new URL(value).origin;
+    if (origin === "https://voltresale.app") return true;
+    // Dev sign-in happens on the local web app (see .env.development.local).
+    return import.meta.env?.DEV === true && origin === "http://localhost:5173";
+  } catch {
+    return false;
+  }
+}
+
+function useChromeProfileSessionReload() {
+  useEffect(() => {
+    if (!CHROME_PROFILE_AUTH_ENABLED) return;
+    const listener: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (changes, area) => {
+      if (area === "local" && changes[PROFILE_AUTH_EVENT_KEY]?.newValue) window.location.reload();
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, []);
+}
+
+function useClerkReturnReload() {
+  useChromeProfileSessionReload();
+  useEffect(() => {
+    let reloadStarted = false;
+    const handleTabUpdated: Parameters<
+      typeof chrome.tabs.onUpdated.addListener
+    >[0] = (_tabId, changeInfo, tab) => {
+      if (reloadStarted || changeInfo.status !== "complete") return;
+      if (!isClerkReturnUrl(changeInfo.url ?? tab.url)) return;
+      reloadStarted = true;
+      window.location.reload();
+    };
+
+    chrome.tabs.onUpdated.addListener(handleTabUpdated);
+    return () => chrome.tabs.onUpdated.removeListener(handleTabUpdated);
+  }, []);
+}
+
+function SidepanelAuthBridge({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn, userId } = useAuth();
+
+  // Production signs in in a tab. Refresh a ready, signed-out panel once when
+  // that session arrives. Clerk writes this cache during its own initialization
+  // too, so observing it while loading would continually restart the panel.
+  // Dev signs in inline and must finish without a cache-triggered navigation.
+  useEffect(() => {
+    if (CHROME_PROFILE_AUTH_ENABLED || !isLoaded || isSignedIn || CLERK_PUBLISHABLE_KEY.startsWith("pk_test_")) return;
+    let reloadStarted = false;
+    const listener: Parameters<typeof chrome.storage.onChanged.addListener>[0] = (
+      changes,
+      areaName,
+    ) => {
+      if (reloadStarted || areaName !== "local") return;
+      const change = changes[CLERK_CLIENT_JWT_CACHE_KEY];
+      if (!change?.newValue || change.newValue === change.oldValue) return;
+      reloadStarted = true;
+      window.location.reload();
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
+  }, [isLoaded, isSignedIn]);
+
+  return (
+    <SidepanelAuthContext.Provider value={isLoaded ? isSignedIn : null}>
+      <SidepanelUserContext.Provider value={isLoaded ? userId ?? null : null}>
+        {children}
+      </SidepanelUserContext.Provider>
+    </SidepanelAuthContext.Provider>
+  );
+}
+
+export function SidepanelClerkProvider({
+  children,
+  page = "/sidepanel.html",
+}: {
+  children: ReactNode;
+  page?: ClerkHostPage;
+}) {
+  useChromeProfileSessionReload();
+  if (!CLERK_PUBLISHABLE_KEY) {
+    return (
+      <SidepanelAuthContext.Provider value={null}>
+        {children}
+      </SidepanelAuthContext.Provider>
+    );
+  }
+
+  const currentExtensionPage = chrome.runtime.getURL(page);
+  return (
+    <ClerkProvider
+      __experimental_syncHostListener
+      publishableKey={CLERK_PUBLISHABLE_KEY}
+      syncHost={CHROME_PROFILE_AUTH_ENABLED ? undefined : CLERK_SYNC_HOST}
+      afterSignOutUrl={currentExtensionPage}
+      signInFallbackRedirectUrl={currentExtensionPage}
+      signUpFallbackRedirectUrl={currentExtensionPage}
+      allowedRedirectProtocols={["chrome-extension:"]}
+    >
+      <SidepanelAuthBridge>{children}</SidepanelAuthBridge>
+    </ClerkProvider>
+  );
+}
+
+export function useSidepanelSignedIn() {
+  return useContext(SidepanelAuthContext);
+}
+
+export function useSidepanelSignIn() {
+  const [signInOpen, setSignInOpen] = useState(false);
+  const openSignIn = useCallback(() => {
+    if (CHROME_PROFILE_AUTH_ENABLED) {
+      setSignInOpen(true);
+    } else if (CLERK_PUBLISHABLE_KEY.startsWith("pk_test_")) {
+      setSignInOpen(true);
+    } else {
+      void chrome.tabs.create({ url: CLERK_SIGN_IN_URL });
+    }
+  }, []);
+  return { signInOpen, openSignIn };
+}
+
+// In-panel Clerk sign-in. Signing in here establishes the Clerk session
+// directly in the extension's own storage — unlike the web handoff, it does
+// not depend on the __client cookie being set on the Clerk Frontend API host,
+// which Chrome blocks in third-party contexts for dev instances
+// (*.clerk.accounts.dev). Hash routing is required because the sidepanel
+// has no router and its URL is a chrome-extension:// page.
+// `gutter` adds the side panel margins; pass false when the parent already has them.
+export function SidepanelSignInCard({ page = "/sidepanel.html", gutter = true }: { page?: ClerkHostPage; gutter?: boolean }) {
+  const className = gutter ? "sidepanel-gutter pb-4" : undefined;
+  if (CHROME_PROFILE_AUTH_ENABLED) return <div className={className}><ChromeProfileSignIn layout="card" /></div>;
+  const currentExtensionPage = chrome.runtime.getURL(page);
+  return (
+    <div className={className}>
+      <SignIn
+        routing="hash"
+        fallbackRedirectUrl={currentExtensionPage}
+        signUpFallbackRedirectUrl={currentExtensionPage}
+        appearance={{ elements: { socialButtonsRoot: "hidden", dividerRow: "hidden" } }}
+      />
+    </div>
+  );
+}
+
+export function useSidepanelUserId() {
+  return useContext(SidepanelUserContext);
+}
+
+function objectFrom(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function statusCopy(status: ExtensionAccessStatus | null, isSignedIn: boolean) {
+  if (!status) return "Checking scanner access";
+  switch (status.access) {
+    case "trial":
+      if (isSignedIn) return "Free account";
+      return `${status.freeSessionsRemaining} free session${
+        status.freeSessionsRemaining === 1 ? "" : "s"
+      } remaining`;
+    case "subscription":
+      return "Donut Pro subscription active";
+    case "exhausted":
+      return status.requiresSignIn
+        ? "Five free sessions used"
+        : status.subscriptionStatus === "expired"
+          ? "Donut Pro subscription expired"
+          : "Donut Pro subscription required";
+  }
+}
+
+function MissingClerkConfiguration({ surface }: { surface: AccessSurface }) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200",
+        surface === "sidepanel" ? "mx-3 mt-2" : "mt-2",
+      )}
+    >
+      Set <code>WXT_CLERK_PUBLISHABLE_KEY</code> to enable account access.
+    </div>
+  );
+}
+
+function AccountAccessMessage({
+  surface,
+  message,
+}: {
+  surface: AccessSurface;
+  message: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-border/70 bg-background/75 px-3 py-2 text-[11px] text-muted-foreground shadow-sm",
+        surface === "sidepanel" ? "mx-3 mt-2" : "mt-2",
+      )}
+      aria-live="polite"
+    >
+      {message}
+    </div>
+  );
+}
+
+class ExtensionAccessErrorBoundary extends Component<
+  { children: ReactNode; surface: AccessSurface },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Volt account access failed", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <AccountAccessMessage
+          surface={this.props.surface}
+          message="Account access is temporarily unavailable. Scanner tools are still ready."
+        />
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export function ExtensionAccessPanel({
+  surface,
+}: {
+  surface: AccessSurface;
+}) {
+  if (!CLERK_PUBLISHABLE_KEY) {
+    return <MissingClerkConfiguration surface={surface} />;
+  }
+  const currentExtensionPage = chrome.runtime.getURL(
+    surface === "sidepanel" ? "/sidepanel.html" : "/mobile-scanner-popup.html",
+  );
+  return (
+    <ExtensionAccessErrorBoundary surface={surface}>
+      <ClerkProvider
+        __experimental_syncHostListener
+        publishableKey={CLERK_PUBLISHABLE_KEY}
+        syncHost={CHROME_PROFILE_AUTH_ENABLED ? undefined : CLERK_SYNC_HOST}
+        afterSignOutUrl={currentExtensionPage}
+        signInFallbackRedirectUrl={currentExtensionPage}
+        signUpFallbackRedirectUrl={currentExtensionPage}
+        allowedRedirectProtocols={["chrome-extension:"]}
+      >
+        <ClerkLoading>
+          <AccountAccessMessage
+            surface={surface}
+            message="Connecting Donut account…"
+          />
+        </ClerkLoading>
+        <ClerkLoaded>
+          <ClerkAccessPanel surface={surface} />
+        </ClerkLoaded>
+      </ClerkProvider>
+    </ExtensionAccessErrorBoundary>
+  );
+}
+
+class ExtensionAccountControlErrorBoundary extends Component<
+  { children: ReactNode; surface: AccountControlSurface },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Volt account control failed", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <span
+          className={accountControlClassName(this.props.surface, "is-unavailable")}
+          title="Account unavailable"
+        >
+          <LogIn />
+        </span>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export function ExtensionAccountControl({
+  surface = "sidepanel",
+  sharedClerkContext = false,
+}: {
+  surface?: AccountControlSurface;
+  sharedClerkContext?: boolean;
+}) {
+  useClerkReturnReload();
+  if (!CLERK_PUBLISHABLE_KEY) return null;
+  const currentExtensionPage = chrome.runtime.getURL(
+    surface === "newtab" ? "/newtab.html" : "/sidepanel.html",
+  );
+
+  const control = (
+    <>
+      <ClerkLoading>
+        <span
+          className={accountControlClassName(surface, "is-loading")}
+          aria-label="Loading Donut account"
+        />
+      </ClerkLoading>
+      <ClerkLoaded>
+        <ClerkAccountControl surface={surface} />
+      </ClerkLoaded>
+    </>
+  );
+
+  return (
+    <ExtensionAccountControlErrorBoundary surface={surface}>
+      {sharedClerkContext ? control : (
+        <ClerkProvider
+          __experimental_syncHostListener
+          publishableKey={CLERK_PUBLISHABLE_KEY}
+          syncHost={CHROME_PROFILE_AUTH_ENABLED ? undefined : CLERK_SYNC_HOST}
+          afterSignOutUrl={currentExtensionPage}
+          signInFallbackRedirectUrl={currentExtensionPage}
+          signUpFallbackRedirectUrl={currentExtensionPage}
+          allowedRedirectProtocols={["chrome-extension:"]}
+        >
+          {control}
+        </ClerkProvider>
+      )}
+    </ExtensionAccountControlErrorBoundary>
+  );
+}
+
+function ClerkAccountControl({ surface }: { surface: AccountControlSurface }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const clerk = useClerk();
+  const { user } = useUser();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    void chrome.runtime
+      .sendMessage({ action: "accessAuthChanged" })
+      .catch(() => undefined);
+  }, [isLoaded, isSignedIn, user?.id]);
+
+  if (isSignedIn) {
+    return (
+      <AccountMenu
+        surface={surface}
+        imageUrl={user?.imageUrl}
+        name={user?.fullName ?? "Donut account"}
+        email={user?.primaryEmailAddress?.emailAddress ?? ""}
+        onManageAccount={() => clerk.openUserProfile()}
+        onSignOut={() => void (CHROME_PROFILE_AUTH_ENABLED ? chrome.runtime.sendMessage({ action: "chromeProfileSignOut" }) : clerk.signOut())}
+      />
+    );
+  }
+
+  // The sidepanel header is one row of tabs, so only the icon fits there.
+  if (CHROME_PROFILE_AUTH_ENABLED) return <ChromeProfileSignIn surface={surface} layout={surface === "sidepanel" ? "compact" : "inline"} />;
+
+  return (
+    <button
+      type="button"
+      className={accountControlClassName(surface, "is-signed-out")}
+      onClick={() => void chrome.tabs.create({ url: CLERK_SIGN_IN_URL })}
+      title="Sign in to Donut"
+    >
+      <LogIn />
+      <span>Sign in</span>
+    </button>
+  );
+}
+
+const profileSignInMessages: Record<string, string> = {
+  chrome_profile_signed_out: "Sign into a Google account in this Chrome profile first.",
+  account_not_linked: "This Google account is not linked to a Donut account. Use another sign-in method to link it.",
+  account_not_allowed: "This Google account cannot access Donut.",
+  mfa_required: "Use the standard sign-in to complete your account's security checks.",
+  additional_sign_in_required: "Use the standard sign-in to finish signing in.",
+};
+
+// compact: icon only, details float below and only when there is an error.
+// card: full-width labelled button for the panel body.
+export function ChromeProfileSignIn({
+  surface = "sidepanel",
+  layout = "inline",
+}: {
+  surface?: AccountControlSurface;
+  layout?: "inline" | "compact" | "card";
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function signIn() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await chrome.runtime.sendMessage({ action: "chromeProfileSignIn" });
+      if (result?.success !== true) setError(profileSignInMessages[result?.error] ?? "Google sign-in could not finish. Try again or use another sign-in method.");
+    } catch {
+      setError("Google sign-in could not finish. Try again or use another sign-in method.");
+    } finally { setBusy(false); }
+  }
+  const label = busy ? "Signing in…" : "Sign in with Chrome profile";
+  return <div className={`extension-profile-sign-in extension-profile-sign-in--${surface} extension-profile-sign-in--${layout}`}>
+    <button type="button" className={accountControlClassName(surface, "is-signed-out")} onClick={() => void signIn()} disabled={busy} title={layout === "compact" ? label : undefined} aria-label={layout === "compact" ? label : undefined}>
+      <LogIn /><span>{label}</span>
+    </button>
+    {(layout !== "compact" || error) && <div className="extension-profile-sign-in-details">
+      {error && <p role="alert" className="extension-profile-sign-in-error">{error}</p>}
+      <button type="button" className="extension-profile-sign-in-fallback" onClick={() => void chrome.runtime.sendMessage({ action: "chromeProfileManualSignIn" })} disabled={busy}>Use another sign-in method</button>
+    </div>}
+  </div>;
+}
+
+function AccountMenu({
+  surface,
+  imageUrl,
+  name,
+  email,
+  onManageAccount,
+  onSignOut,
+}: {
+  surface: AccountControlSurface;
+  imageUrl: string | undefined;
+  name: string;
+  email: string;
+  onManageAccount: () => void;
+  onSignOut: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOutside = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !rootRef.current?.contains(event.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  const runAndClose = (action: () => void) => {
+    setOpen(false);
+    action();
+  };
+
+  return (
+    <div
+      ref={rootRef}
+      className={`extension-account-menu extension-account-menu--${surface}`}
+      title={`Donut account: ${name}`}
+    >
+      <button
+        type="button"
+        className="extension-account-menu-trigger"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label={open ? "Close user menu" : "Open user menu"}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="extension-account-avatar-frame">
+          {imageUrl ? (
+            <img src={imageUrl} alt="" className="extension-account-avatar" />
+          ) : (
+            <UserRound aria-hidden="true" />
+          )}
+        </span>
+      </button>
+
+      {open ? (
+        <div
+          className="extension-account-popover"
+          role="dialog"
+          aria-label="Donut account"
+        >
+          <div className="extension-account-preview">
+            {imageUrl ? (
+              <img src={imageUrl} alt="" className="extension-account-preview-avatar" />
+            ) : (
+              <span className="extension-account-preview-fallback">
+                <UserRound aria-hidden="true" />
+              </span>
+            )}
+            <span className="extension-account-preview-copy">
+              <strong>{name}</strong>
+              {email ? <span>{email}</span> : null}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="extension-account-menu-item"
+            onClick={() => runAndClose(onManageAccount)}
+          >
+            <UserRound aria-hidden="true" />
+            <span>Manage account</span>
+          </button>
+          <button
+            type="button"
+            className="extension-account-menu-item"
+            onClick={() => runAndClose(onSignOut)}
+          >
+            <LogOut aria-hidden="true" />
+            <span>Sign out</span>
+          </button>
+          <div className="extension-account-popover-footer">Secured by Clerk</div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ClerkAccessPanel({ surface }: { surface: AccessSurface }) {
+  const { isLoaded: authLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const { organization } = useOrganization();
+  const [status, setStatus] = useState<ExtensionAccessStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const applyResponse = useCallback((response: unknown) => {
+    const record = objectFrom(response);
+    const nextStatus = parseExtensionAccessStatus(
+      record?.status ?? record?.accessStatus,
+    );
+    if (nextStatus) {
+      setStatus(nextStatus);
+      setError(null);
+      return;
+    }
+    if (typeof record?.error === "string") setError(record.error);
+  }, []);
+
+  const refresh = useCallback(
+    async (authChanged = false) => {
+      setRefreshing(true);
+      try {
+        const response = await chrome.runtime.sendMessage({
+          action: authChanged ? "accessAuthChanged" : "accessGetStatus",
+        });
+        applyResponse(response);
+      } catch (refreshError) {
+        setError(
+          refreshError instanceof Error
+            ? refreshError.message
+            : "Unable to load scanner access",
+        );
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [applyResponse],
+  );
+
+  useEffect(() => {
+    if (!authLoaded) return;
+    void refresh(true);
+  }, [authLoaded, isSignedIn, organization?.id, refresh, user?.id]);
+
+  useEffect(() => {
+    const listener = (message: unknown) => {
+      const record = objectFrom(message);
+      if (record?.action !== "accessStatusChanged") return;
+      const nextStatus = parseExtensionAccessStatus(record.status);
+      if (nextStatus) setStatus(nextStatus);
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, []);
+
+  const accountName = isSignedIn
+    ? user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "Signed in"
+    : "Guest";
+  const workspaceName = organization?.name ?? "Personal workspace";
+  const exhausted = status?.access === "exhausted";
+  const openWebSignIn = () => {
+    void chrome.tabs.create({ url: CLERK_SIGN_IN_URL });
+  };
+
+  return (
+    <section
+      className={cn(
+        "rounded-xl border border-border/70 bg-background/75 px-3 py-2 shadow-sm backdrop-blur",
+        surface === "sidepanel" ? "mx-3 mt-2" : "volt-access-panel--popup mt-2",
+      )}
+      aria-live="polite"
+    >
+      <div className="flex items-center gap-2">
+        <ShieldCheck
+          className={cn(
+            "h-4 w-4 shrink-0",
+            status?.isAuthorized ? "text-emerald-600" : "text-amber-600",
+          )}
+        />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[11px] font-bold text-foreground">
+            {statusCopy(status, Boolean(isSignedIn))}
+          </div>
+          <div className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground">
+            <span className="truncate">{accountName}</span>
+            <span aria-hidden="true">·</span>
+            <Building2 className="h-3 w-3 shrink-0" />
+            <span className="truncate">{workspaceName}</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void refresh()}
+          className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Refresh scanner access"
+          title="Refresh scanner access"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+        </button>
+        {isSignedIn ? (
+          <UserButton />
+        ) : (
+          <button
+            type="button"
+            onClick={openWebSignIn}
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-emerald-700"
+            title="Sign in to Donut in a browser tab"
+          >
+            Sign in
+            <ExternalLink className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+
+      {isSignedIn && surface === "sidepanel" ? (
+        <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-border/60 pt-1.5">
+          <span className="text-[10px] font-medium text-muted-foreground">
+            Workspace
+          </span>
+          <OrganizationSwitcher hidePersonal={false} />
+        </div>
+      ) : null}
+
+      {exhausted ? (
+        <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-amber-500/20 pt-1.5">
+          <p className="m-0 text-[10px] leading-tight text-amber-700 dark:text-amber-300">
+            {status.requiresSignIn
+              ? "Sign in, then subscribe in Donut for iPhone if needed."
+              : "Checkout is available only in the full iPhone app."}
+          </p>
+          <button
+            type="button"
+            onClick={() =>
+              void chrome.runtime.sendMessage({ action: "accessOpenFullApp" })
+            }
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-500/30 px-2 py-1 text-[10px] font-bold text-amber-800 hover:bg-amber-500/10 dark:text-amber-200"
+          >
+            Get app
+            <ExternalLink className="h-3 w-3" />
+          </button>
+        </div>
+      ) : null}
+
+      {error ? (
+        <p className="m-0 mt-1 text-[10px] text-red-600 dark:text-red-300">
+          {error}
+        </p>
+      ) : null}
+    </section>
+  );
+}

@@ -1,0 +1,7 @@
+platform :ios, '16.4'
+
+install! 'cocoapods',
+  :deterministic_uuids => false
+
+target 'Volt' do
+end

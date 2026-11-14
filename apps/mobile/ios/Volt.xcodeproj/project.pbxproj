@@ -1,0 +1,1157 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		54EEE472295587B576FFFE34 /* libPods-Volt.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 73738A299D6D02927E0C886A /* libPods-Volt.a */; };
+		B00000000000000000000001 /* VoltApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000001 /* VoltApp.swift */; };
+		B00000000000000000000002 /* CaptureMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000002 /* CaptureMode.swift */; };
+		B00000000000000000000022 /* CaptureOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000022 /* CaptureOrientation.swift */; };
+		B00000000000000000000003 /* ScanResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000003 /* ScanResult.swift */; };
+		B00000000000000000000006 /* CameraModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000006 /* CameraModel.swift */; };
+		B00000000000000000000007 /* TextRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000007 /* TextRecognizer.swift */; };
+		B00000000000000000000009 /* ScannerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000009 /* ScannerStore.swift */; };
+		B0000000000000000000000A /* CameraPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000000A /* CameraPreview.swift */; };
+		B0000000000000000000000B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000000B /* RootView.swift */; };
+		B0000000000000000000000C /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000000C /* ScannerView.swift */; };
+		B0000000000000000000000E /* ResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000000E /* ResultsView.swift */; };
+		B0000000000000000000000F /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000000F /* Images.xcassets */; };
+		B00000000000000000000010 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000010 /* SplashScreen.storyboard */; };
+		B00000000000000000000011 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000011 /* PrivacyInfo.xcprivacy */; };
+		B0000000000000000000001B /* volt.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000001B /* volt.icon */; };
+		B0000000000000000000001C /* ScannerRecognitionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000001E /* ScannerRecognitionModels.swift */; };
+		B0000000000000000000001D /* CameraDeviceSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000001F /* CameraDeviceSelector.swift */; };
+		B0000000000000000000001E /* CameraZoomController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000020 /* CameraZoomController.swift */; };
+		B0000000000000000000001F /* OcrTextCleaner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000021 /* OcrTextCleaner.swift */; };
+		B10000000000000000000001 /* ScannerStoreCaptureActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000001 /* ScannerStoreCaptureActions.swift */; };
+		B10000000000000000000005 /* CaptureSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000005 /* CaptureSessionView.swift */; };
+		B10000000000000000000006 /* CameraSessionControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000006 /* CameraSessionControls.swift */; };
+		B10000000000000000000007 /* ScannerCameraLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000007 /* ScannerCameraLayer.swift */; };
+		B10000000000000000000008 /* CapturedResultRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000008 /* CapturedResultRow.swift */; };
+		B10000000000000000000009 /* CaptureDocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000009 /* CaptureDocks.swift */; };
+		B1000000000000000000000A /* OcrReviewLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000A /* OcrReviewLayer.swift */; };
+		B1000000000000000000000B /* CaptureGuideOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000B /* CaptureGuideOverlay.swift */; };
+		B1000000000000000000000C /* ScreenshotFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000C /* ScreenshotFixtures.swift */; };
+		B1000000000000000000000D /* SharedCameraSessionControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000D /* SharedCameraSessionControls.swift */; };
+		B1000000000000000000000E /* SharedScannerTabComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000E /* SharedScannerTabComponents.swift */; };
+		B10000000000000000000099 /* SharedPhotoGalleryComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000099 /* SharedPhotoGalleryComponents.swift */; };
+		B10000000000000000000010 /* BarcodeDetectionReticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000010 /* BarcodeDetectionReticle.swift */; };
+		B10000000000000000000011 /* SharedCaptureSessionOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000011 /* SharedCaptureSessionOverlays.swift */; };
+		B10000000000000000000012 /* CloudPhotoRendition.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000012 /* CloudPhotoRendition.swift */; };
+		B20000000000000000000001 /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000001 /* SnapshotHelper.swift */; };
+		B20000000000000000000002 /* VoltScreenshots.swift in Sources */ = {isa = PBXBuildFile; fileRef = C20000000000000000000002 /* VoltScreenshots.swift */; };
+		B30000000000000000000001 /* VoltClipApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000001 /* VoltClipApp.swift */; };
+		B30000000000000000000002 /* ClipRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000002 /* ClipRootView.swift */; };
+		B30000000000000000000006 /* ClipScannerStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3000000000000000000000A /* ClipScannerStore.swift */; };
+		B3000000000000000000000A /* CaptureMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000002 /* CaptureMode.swift */; };
+		B30000000000000000000022 /* CaptureOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000022 /* CaptureOrientation.swift */; };
+		B3000000000000000000000B /* PairingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000004 /* PairingSession.swift */; };
+		B3000000000000000000000C /* PairingURLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000005 /* PairingURLParser.swift */; };
+		B3000000000000000000000F /* ClipBarcodeScannerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3000000000000000000000D /* ClipBarcodeScannerService.swift */; };
+		B30000000000000000000010 /* ClipOCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3000000000000000000000E /* ClipOCRService.swift */; };
+		B30000000000000000000011 /* SharedCameraSessionControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000D /* SharedCameraSessionControls.swift */; };
+		B30000000000000000000012 /* SharedScannerTabComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000E /* SharedScannerTabComponents.swift */; };
+		B30000000000000000000099 /* SharedPhotoGalleryComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000099 /* SharedPhotoGalleryComponents.swift */; };
+		B30000000000000000000013 /* SharedPairingSessionComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000F /* SharedPairingSessionComponents.swift */; };
+		B30000000000000000000014 /* ClipAssets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C3000000000000000000000F /* ClipAssets.xcassets */; };
+		B30000000000000000000015 /* ScannerRecognitionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000001E /* ScannerRecognitionModels.swift */; };
+		B30000000000000000000025 /* TextRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000007 /* TextRecognizer.swift */; };
+		B30000000000000000000016 /* BarcodeDetectionReticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000010 /* BarcodeDetectionReticle.swift */; };
+		B30000000000000000000017 /* CameraSessionControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000006 /* CameraSessionControls.swift */; };
+		B30000000000000000000018 /* CaptureGuideOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000B /* CaptureGuideOverlay.swift */; };
+		B30000000000000000000019 /* OcrReviewLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000A /* OcrReviewLayer.swift */; };
+		B3000000000000000000001A /* CameraDeviceSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000001F /* CameraDeviceSelector.swift */; };
+		B3000000000000000000001B /* CameraZoomController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000020 /* CameraZoomController.swift */; };
+		B3000000000000000000001C /* OcrTextCleaner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C00000000000000000000021 /* OcrTextCleaner.swift */; };
+		B3000000000000000000001D /* SharedCaptureSessionOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000011 /* SharedCaptureSessionOverlays.swift */; };
+		B3000000000000000000001E /* volt.icon in Resources */ = {isa = PBXBuildFile; fileRef = C0000000000000000000001B /* volt.icon */; };
+		B3000000000000000000001F /* VoltClip.app in Embed App Clips */ = {isa = PBXBuildFile; fileRef = C30000000000000000000008 /* VoltClip.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B30000000000000000000021 /* AppClipGuestCloudClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30000000000000000000010 /* AppClipGuestCloudClient.swift */; };
+		B30000000000000000000023 /* SpeechDictationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70000000000000000000001 /* SpeechDictationService.swift */; };
+		B30000000000000000000024 /* CloudPhotoRendition.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000012 /* CloudPhotoRendition.swift */; };
+		B40000000000000000000001 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000001 /* AppConfiguration.swift */; };
+		B40000000000000000000002 /* AccessKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000002 /* AccessKind.swift */; };
+		B40000000000000000000003 /* AccessStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000003 /* AccessStatus.swift */; };
+		B40000000000000000000004 /* MobileAccessErrorResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000004 /* MobileAccessErrorResponse.swift */; };
+		B40000000000000000000005 /* VoltSubscriptionStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000005 /* VoltSubscriptionStatus.swift */; };
+		B40000000000000000000006 /* AccessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000006 /* AccessStore.swift */; };
+		B40000000000000000000007 /* MobileAccessAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000007 /* MobileAccessAPIClient.swift */; };
+		B40000000000000000000008 /* MobileAccessError.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000008 /* MobileAccessError.swift */; };
+		B40000000000000000000009 /* StoreKitSubscriptionError.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000009 /* StoreKitSubscriptionError.swift */; };
+		B4000000000000000000000A /* StoreKitSubscriptionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000A /* StoreKitSubscriptionStore.swift */; };
+		B4000000000000000000000D /* ClerkImagePrefetchModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000D /* ClerkImagePrefetchModifier.swift */; };
+		B4000000000000000000000E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000E /* SettingsView.swift */; };
+		B4000000000000000000000F /* SubscriptionActionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4000000000000000000000F /* SubscriptionActionsView.swift */; };
+		B40000000000000000000010 /* VoltRootScene.swift in Sources */ = {isa = PBXBuildFile; fileRef = C40000000000000000000010 /* VoltRootScene.swift */; };
+		B40000000000000000000012 /* ClerkKit in Frameworks */ = {isa = PBXBuildFile; productRef = R40000000000000000000002 /* ClerkKit */; };
+		B40000000000000000000013 /* ClerkKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = R40000000000000000000003 /* ClerkKitUI */; };
+		B50000000000000000000009 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = R50000000000000000000002 /* ConvexMobile */; };
+		B50000000000000000000001 /* CloudDeviceCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50000000000000000000001 /* CloudDeviceCredential.swift */; };
+		B50000000000000000000002 /* CloudCaptureRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50000000000000000000002 /* CloudCaptureRecord.swift */; };
+		B50000000000000000000003 /* CloudAPIContracts.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50000000000000000000003 /* CloudAPIContracts.swift */; };
+		B50000000000000000000005 /* DeviceCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50000000000000000000005 /* DeviceCredentialStore.swift */; };
+		B50000000000000000000006 /* DurableCaptureOutbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50000000000000000000006 /* DurableCaptureOutbox.swift */; };
+		B50000000000000000000007 /* MobileCloudAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50000000000000000000007 /* MobileCloudAPIClient.swift */; };
+		B50000000000000000000008 /* CloudWorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50000000000000000000008 /* CloudWorkspaceStore.swift */; };
+		B60000000000000000000001 /* CaptureModeCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60000000000000000000001 /* CaptureModeCards.swift */; };
+		B60000000000000000000003 /* CloudTargetPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60000000000000000000003 /* CloudTargetPickerSheet.swift */; };
+		B60000000000000000000004 /* AuthenticationLandingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60000000000000000000004 /* AuthenticationLandingView.swift */; };
+		B60000000000000000000005 /* VoltBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = C60000000000000000000005 /* VoltBrand.swift */; };
+		B80000000000000000000001 /* QRSignInStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80000000000000000000001 /* QRSignInStore.swift */; };
+		B80000000000000000000002 /* QRSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80000000000000000000002 /* QRSignInView.swift */; };
+		B70000000000000000000001 /* SpeechDictationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70000000000000000000001 /* SpeechDictationService.swift */; };
+		B70000000000000000000002 /* ScannerStoreDictation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70000000000000000000002 /* ScannerStoreDictation.swift */; };
+		B70000000000000000000003 /* DictationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70000000000000000000003 /* DictationView.swift */; };
+		CB0F85194A68BB4736C9C1B9 /* ClipCaptureHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A9C883B0839866C28922BF2 /* ClipCaptureHomeView.swift */; };
+		2051B55CB680441B6C713695 /* ClipHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73317ABE2FE4BAD9AF23D4B /* ClipHistoryView.swift */; };
+		7630DE11C6C33C84FCFDBE33 /* ClipWorkspaceTargetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2323E0F3B5ABEF096BF0044 /* ClipWorkspaceTargetView.swift */; };
+		6067E81E459E6CD6D4921CC6 /* ClipPhotoLibraryUploadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AEADB5488DA1E1DB0E460A8 /* ClipPhotoLibraryUploadView.swift */; };
+		74E0487E157924E7D8DC2533 /* ClipConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 101197839C307A14E0CB2C3F /* ClipConnectionView.swift */; };
+		2F7FFBDAC817614C017440E7 /* ClipCaptureSessionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66F53F8EF098E7AD0C1363BD /* ClipCaptureSessionView.swift */; };
+		A65043AECFD96D30E7BC2EC2 /* ClipCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BEE29BC2C5EA0D06414E55C /* ClipCameraView.swift */; };
+		4FE7C1B775254B342AFA247F /* ClipPairingScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73230DB4EF324D9BF73229AF /* ClipPairingScannerView.swift */; };
+		C214CA7B979DBF36E69A4C4B /* CloudComputerPageChain.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7ACB9D50F4A1C3E8464D329 /* CloudComputerPageChain.swift */; };
+		1CD72A9136FB17BC4048723E /* CloudComputerSubscriptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8EDDF2FBE9A7668EBE3ED70 /* CloudComputerSubscriptions.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D20000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = I00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F00000000000000000000001;
+			remoteInfo = Volt;
+		};
+		D40000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = I00000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F30000000000000000000001;
+			remoteInfo = VoltClip;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E30000000000000000000006 /* Embed App Clips */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/AppClips";
+			dstSubfolderSpec = 16;
+			files = (
+				B3000000000000000000001F /* VoltClip.app in Embed App Clips */,
+			);
+			name = "Embed App Clips";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		577C15430A95FB0B1F9D6C10 /* Pods-Volt.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Volt.debug.xcconfig"; path = "Target Support Files/Pods-Volt/Pods-Volt.debug.xcconfig"; sourceTree = "<group>"; };
+		73738A299D6D02927E0C886A /* libPods-Volt.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-Volt.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000001 /* VoltApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoltApp.swift; sourceTree = "<group>"; };
+		C00000000000000000000002 /* CaptureMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureMode.swift; sourceTree = "<group>"; };
+		C00000000000000000000022 /* CaptureOrientation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureOrientation.swift; sourceTree = "<group>"; };
+		C00000000000000000000003 /* ScanResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanResult.swift; sourceTree = "<group>"; };
+		C00000000000000000000004 /* PairingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingSession.swift; sourceTree = "<group>"; };
+		C00000000000000000000005 /* PairingURLParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingURLParser.swift; sourceTree = "<group>"; };
+		C00000000000000000000006 /* CameraModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraModel.swift; sourceTree = "<group>"; };
+		C00000000000000000000007 /* TextRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextRecognizer.swift; sourceTree = "<group>"; };
+		C00000000000000000000009 /* ScannerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerStore.swift; sourceTree = "<group>"; };
+		C0000000000000000000000A /* CameraPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreview.swift; sourceTree = "<group>"; };
+		C0000000000000000000000B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		C0000000000000000000000C /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
+		C0000000000000000000000E /* ResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultsView.swift; sourceTree = "<group>"; };
+		C0000000000000000000000F /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
+		C00000000000000000000010 /* SplashScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = SplashScreen.storyboard; sourceTree = "<group>"; };
+		C00000000000000000000011 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		C00000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C00000000000000000000014 /* Volt.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Volt.entitlements; sourceTree = "<group>"; };
+		C00000000000000000000015 /* Volt.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Volt.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C00000000000000000000018 /* ScannerProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerProtocol.swift; sourceTree = "<group>"; };
+		C00000000000000000000019 /* ScannerSignalingClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerSignalingClient.swift; sourceTree = "<group>"; };
+		C0000000000000000000001B /* volt.icon */ = {isa = PBXFileReference; explicitFileType = com.apple.iconcomposer.icon; path = volt.icon; sourceTree = "<group>"; };
+		C0000000000000000000001E /* ScannerRecognitionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerRecognitionModels.swift; sourceTree = "<group>"; };
+		C0000000000000000000001F /* CameraDeviceSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraDeviceSelector.swift; sourceTree = "<group>"; };
+		C00000000000000000000020 /* CameraZoomController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraZoomController.swift; sourceTree = "<group>"; };
+		C00000000000000000000021 /* OcrTextCleaner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OcrTextCleaner.swift; sourceTree = "<group>"; };
+		C10000000000000000000001 /* ScannerStoreCaptureActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerStoreCaptureActions.swift; sourceTree = "<group>"; };
+		C10000000000000000000004 /* PairingSecretStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingSecretStore.swift; sourceTree = "<group>"; };
+		C10000000000000000000005 /* CaptureSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureSessionView.swift; sourceTree = "<group>"; };
+		C10000000000000000000006 /* CameraSessionControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraSessionControls.swift; sourceTree = "<group>"; };
+		C10000000000000000000007 /* ScannerCameraLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerCameraLayer.swift; sourceTree = "<group>"; };
+		C10000000000000000000008 /* CapturedResultRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturedResultRow.swift; sourceTree = "<group>"; };
+		C10000000000000000000009 /* CaptureDocks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureDocks.swift; sourceTree = "<group>"; };
+		C1000000000000000000000A /* OcrReviewLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OcrReviewLayer.swift; sourceTree = "<group>"; };
+		C1000000000000000000000B /* CaptureGuideOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureGuideOverlay.swift; sourceTree = "<group>"; };
+		C1000000000000000000000C /* ScreenshotFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotFixtures.swift; sourceTree = "<group>"; };
+		C1000000000000000000000D /* SharedCameraSessionControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedCameraSessionControls.swift; sourceTree = "<group>"; };
+		C1000000000000000000000E /* SharedScannerTabComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedScannerTabComponents.swift; sourceTree = "<group>"; };
+		C10000000000000000000099 /* SharedPhotoGalleryComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPhotoGalleryComponents.swift; sourceTree = "<group>"; };
+		C1000000000000000000000F /* SharedPairingSessionComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPairingSessionComponents.swift; sourceTree = "<group>"; };
+		C10000000000000000000010 /* BarcodeDetectionReticle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarcodeDetectionReticle.swift; sourceTree = "<group>"; };
+		C10000000000000000000011 /* SharedCaptureSessionOverlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedCaptureSessionOverlays.swift; sourceTree = "<group>"; };
+		C10000000000000000000012 /* CloudPhotoRendition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudPhotoRendition.swift; sourceTree = "<group>"; };
+		C20000000000000000000001 /* SnapshotHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotHelper.swift; sourceTree = "<group>"; };
+		C20000000000000000000002 /* VoltScreenshots.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoltScreenshots.swift; sourceTree = "<group>"; };
+		C20000000000000000000003 /* VoltScreenshots.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoltScreenshots.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C2FE1E81FC70D4D44558094E /* Pods-Volt.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Volt.release.xcconfig"; path = "Target Support Files/Pods-Volt/Pods-Volt.release.xcconfig"; sourceTree = "<group>"; };
+		C30000000000000000000001 /* VoltClipApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoltClipApp.swift; sourceTree = "<group>"; };
+		C30000000000000000000002 /* ClipRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipRootView.swift; sourceTree = "<group>"; };
+		C30000000000000000000006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C30000000000000000000007 /* VoltClip.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VoltClip.entitlements; sourceTree = "<group>"; };
+		C30000000000000000000008 /* VoltClip.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoltClip.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C3000000000000000000000A /* ClipScannerStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipScannerStore.swift; sourceTree = "<group>"; };
+		C3000000000000000000000D /* ClipBarcodeScannerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipBarcodeScannerService.swift; sourceTree = "<group>"; };
+		C3000000000000000000000E /* ClipOCRService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipOCRService.swift; sourceTree = "<group>"; };
+		C3000000000000000000000F /* ClipAssets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = ClipAssets.xcassets; sourceTree = "<group>"; };
+		C30000000000000000000010 /* AppClipGuestCloudClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppClipGuestCloudClient.swift; sourceTree = "<group>"; };
+		C40000000000000000000001 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
+		C40000000000000000000002 /* AccessKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessKind.swift; sourceTree = "<group>"; };
+		C40000000000000000000003 /* AccessStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessStatus.swift; sourceTree = "<group>"; };
+		C40000000000000000000004 /* MobileAccessErrorResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAccessErrorResponse.swift; sourceTree = "<group>"; };
+		C40000000000000000000005 /* VoltSubscriptionStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoltSubscriptionStatus.swift; sourceTree = "<group>"; };
+		C40000000000000000000006 /* AccessStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessStore.swift; sourceTree = "<group>"; };
+		C40000000000000000000007 /* MobileAccessAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAccessAPIClient.swift; sourceTree = "<group>"; };
+		C40000000000000000000008 /* MobileAccessError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileAccessError.swift; sourceTree = "<group>"; };
+		C40000000000000000000009 /* StoreKitSubscriptionError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitSubscriptionError.swift; sourceTree = "<group>"; };
+		C4000000000000000000000A /* StoreKitSubscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitSubscriptionStore.swift; sourceTree = "<group>"; };
+		C4000000000000000000000D /* ClerkImagePrefetchModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkImagePrefetchModifier.swift; sourceTree = "<group>"; };
+		C4000000000000000000000E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		C4000000000000000000000F /* SubscriptionActionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionActionsView.swift; sourceTree = "<group>"; };
+		C40000000000000000000010 /* VoltRootScene.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoltRootScene.swift; sourceTree = "<group>"; };
+		C50000000000000000000001 /* CloudDeviceCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudDeviceCredential.swift; sourceTree = "<group>"; };
+		C50000000000000000000002 /* CloudCaptureRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudCaptureRecord.swift; sourceTree = "<group>"; };
+		C50000000000000000000003 /* CloudAPIContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudAPIContracts.swift; sourceTree = "<group>"; };
+		C50000000000000000000005 /* DeviceCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceCredentialStore.swift; sourceTree = "<group>"; };
+		C50000000000000000000006 /* DurableCaptureOutbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DurableCaptureOutbox.swift; sourceTree = "<group>"; };
+		C50000000000000000000007 /* MobileCloudAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileCloudAPIClient.swift; sourceTree = "<group>"; };
+		C50000000000000000000008 /* CloudWorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudWorkspaceStore.swift; sourceTree = "<group>"; };
+		C60000000000000000000001 /* CaptureModeCards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureModeCards.swift; sourceTree = "<group>"; };
+		C60000000000000000000003 /* CloudTargetPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudTargetPickerSheet.swift; sourceTree = "<group>"; };
+		C60000000000000000000004 /* AuthenticationLandingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticationLandingView.swift; sourceTree = "<group>"; };
+		C60000000000000000000005 /* VoltBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoltBrand.swift; sourceTree = "<group>"; };
+		C80000000000000000000001 /* QRSignInStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRSignInStore.swift; sourceTree = "<group>"; };
+		C80000000000000000000002 /* QRSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRSignInView.swift; sourceTree = "<group>"; };
+		C70000000000000000000001 /* SpeechDictationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechDictationService.swift; sourceTree = "<group>"; };
+		C70000000000000000000002 /* ScannerStoreDictation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerStoreDictation.swift; sourceTree = "<group>"; };
+		C70000000000000000000003 /* DictationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationView.swift; sourceTree = "<group>"; };
+		3A9C883B0839866C28922BF2 /* ClipCaptureHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipCaptureHomeView.swift; sourceTree = "<group>"; };
+		B73317ABE2FE4BAD9AF23D4B /* ClipHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipHistoryView.swift; sourceTree = "<group>"; };
+		E2323E0F3B5ABEF096BF0044 /* ClipWorkspaceTargetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipWorkspaceTargetView.swift; sourceTree = "<group>"; };
+		8AEADB5488DA1E1DB0E460A8 /* ClipPhotoLibraryUploadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipPhotoLibraryUploadView.swift; sourceTree = "<group>"; };
+		101197839C307A14E0CB2C3F /* ClipConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipConnectionView.swift; sourceTree = "<group>"; };
+		66F53F8EF098E7AD0C1363BD /* ClipCaptureSessionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipCaptureSessionView.swift; sourceTree = "<group>"; };
+		7BEE29BC2C5EA0D06414E55C /* ClipCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipCameraView.swift; sourceTree = "<group>"; };
+		73230DB4EF324D9BF73229AF /* ClipPairingScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipPairingScannerView.swift; sourceTree = "<group>"; };
+		F7ACB9D50F4A1C3E8464D329 /* CloudComputerPageChain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudComputerPageChain.swift; sourceTree = "<group>"; };
+		A8EDDF2FBE9A7668EBE3ED70 /* CloudComputerSubscriptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudComputerSubscriptions.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D00000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B40000000000000000000012 /* ClerkKit in Frameworks */,
+				B40000000000000000000013 /* ClerkKitUI in Frameworks */,
+				B50000000000000000000009 /* ConvexMobile in Frameworks */,
+				54EEE472295587B576FFFE34 /* libPods-Volt.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D20000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		62DD079D976BDF3DEE28B67C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				73738A299D6D02927E0C886A /* libPods-Volt.a */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		9BA23944F6CEA1190A8C9A61 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				577C15430A95FB0B1F9D6C10 /* Pods-Volt.debug.xcconfig */,
+				C2FE1E81FC70D4D44558094E /* Pods-Volt.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		E00000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				E00000000000000000000003 /* Volt */,
+				E30000000000000000000001 /* VoltClip */,
+				E20000000000000000000001 /* VoltScreenshots */,
+				E00000000000000000000002 /* Products */,
+				9BA23944F6CEA1190A8C9A61 /* Pods */,
+				62DD079D976BDF3DEE28B67C /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		E00000000000000000000002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C00000000000000000000015 /* Volt.app */,
+				C30000000000000000000008 /* VoltClip.app */,
+				C20000000000000000000003 /* VoltScreenshots.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E00000000000000000000003 /* Volt */ = {
+			isa = PBXGroup;
+			children = (
+				E00000000000000000000004 /* App */,
+				E00000000000000000000005 /* Models */,
+				E00000000000000000000006 /* Services */,
+				E00000000000000000000007 /* Views */,
+				C0000000000000000000000F /* Images.xcassets */,
+				C00000000000000000000010 /* SplashScreen.storyboard */,
+				C00000000000000000000011 /* PrivacyInfo.xcprivacy */,
+				C00000000000000000000013 /* Info.plist */,
+				C00000000000000000000014 /* Volt.entitlements */,
+				C0000000000000000000001B /* volt.icon */,
+			);
+			path = Volt;
+			sourceTree = "<group>";
+		};
+		E00000000000000000000004 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				C00000000000000000000001 /* VoltApp.swift */,
+				C40000000000000000000001 /* AppConfiguration.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		E00000000000000000000005 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				C50000000000000000000003 /* CloudAPIContracts.swift */,
+				F7ACB9D50F4A1C3E8464D329 /* CloudComputerPageChain.swift */,
+				C50000000000000000000002 /* CloudCaptureRecord.swift */,
+				C50000000000000000000001 /* CloudDeviceCredential.swift */,
+				C40000000000000000000002 /* AccessKind.swift */,
+				C40000000000000000000003 /* AccessStatus.swift */,
+				C40000000000000000000004 /* MobileAccessErrorResponse.swift */,
+				C40000000000000000000005 /* VoltSubscriptionStatus.swift */,
+				C00000000000000000000002 /* CaptureMode.swift */,
+				C00000000000000000000022 /* CaptureOrientation.swift */,
+				C00000000000000000000003 /* ScanResult.swift */,
+				C00000000000000000000004 /* PairingSession.swift */,
+				C0000000000000000000001E /* ScannerRecognitionModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		E00000000000000000000006 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				C10000000000000000000012 /* CloudPhotoRendition.swift */,
+				C50000000000000000000008 /* CloudWorkspaceStore.swift */,
+				A8EDDF2FBE9A7668EBE3ED70 /* CloudComputerSubscriptions.swift */,
+				C50000000000000000000005 /* DeviceCredentialStore.swift */,
+				C50000000000000000000006 /* DurableCaptureOutbox.swift */,
+				C50000000000000000000007 /* MobileCloudAPIClient.swift */,
+				C40000000000000000000006 /* AccessStore.swift */,
+				C40000000000000000000007 /* MobileAccessAPIClient.swift */,
+				C80000000000000000000001 /* QRSignInStore.swift */,
+				C40000000000000000000008 /* MobileAccessError.swift */,
+				C40000000000000000000009 /* StoreKitSubscriptionError.swift */,
+				C4000000000000000000000A /* StoreKitSubscriptionStore.swift */,
+				C00000000000000000000005 /* PairingURLParser.swift */,
+				C0000000000000000000001F /* CameraDeviceSelector.swift */,
+				C00000000000000000000020 /* CameraZoomController.swift */,
+				C00000000000000000000006 /* CameraModel.swift */,
+				C00000000000000000000021 /* OcrTextCleaner.swift */,
+				C00000000000000000000007 /* TextRecognizer.swift */,
+				C00000000000000000000009 /* ScannerStore.swift */,
+				C10000000000000000000001 /* ScannerStoreCaptureActions.swift */,
+				C70000000000000000000002 /* ScannerStoreDictation.swift */,
+				C70000000000000000000001 /* SpeechDictationService.swift */,
+				C10000000000000000000004 /* PairingSecretStore.swift */,
+				C1000000000000000000000C /* ScreenshotFixtures.swift */,
+				C00000000000000000000018 /* ScannerProtocol.swift */,
+				C00000000000000000000019 /* ScannerSignalingClient.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		E00000000000000000000007 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				C4000000000000000000000D /* ClerkImagePrefetchModifier.swift */,
+				C4000000000000000000000E /* SettingsView.swift */,
+				C4000000000000000000000F /* SubscriptionActionsView.swift */,
+				C40000000000000000000010 /* VoltRootScene.swift */,
+				C60000000000000000000004 /* AuthenticationLandingView.swift */,
+				C80000000000000000000002 /* QRSignInView.swift */,
+				C60000000000000000000005 /* VoltBrand.swift */,
+				C0000000000000000000000A /* CameraPreview.swift */,
+				C0000000000000000000000B /* RootView.swift */,
+				C0000000000000000000000C /* ScannerView.swift */,
+				C70000000000000000000003 /* DictationView.swift */,
+				C60000000000000000000001 /* CaptureModeCards.swift */,
+				C60000000000000000000003 /* CloudTargetPickerSheet.swift */,
+				C10000000000000000000005 /* CaptureSessionView.swift */,
+				C1000000000000000000000D /* SharedCameraSessionControls.swift */,
+				C1000000000000000000000E /* SharedScannerTabComponents.swift */,
+				C10000000000000000000099 /* SharedPhotoGalleryComponents.swift */,
+				C1000000000000000000000F /* SharedPairingSessionComponents.swift */,
+				C10000000000000000000011 /* SharedCaptureSessionOverlays.swift */,
+				C10000000000000000000006 /* CameraSessionControls.swift */,
+				C10000000000000000000007 /* ScannerCameraLayer.swift */,
+				C10000000000000000000010 /* BarcodeDetectionReticle.swift */,
+				C10000000000000000000008 /* CapturedResultRow.swift */,
+				C10000000000000000000009 /* CaptureDocks.swift */,
+				C1000000000000000000000A /* OcrReviewLayer.swift */,
+				C1000000000000000000000B /* CaptureGuideOverlay.swift */,
+				C0000000000000000000000E /* ResultsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		E20000000000000000000001 /* VoltScreenshots */ = {
+			isa = PBXGroup;
+			children = (
+				C20000000000000000000001 /* SnapshotHelper.swift */,
+				C20000000000000000000002 /* VoltScreenshots.swift */,
+			);
+			path = VoltScreenshots;
+			sourceTree = "<group>";
+		};
+		E30000000000000000000001 /* VoltClip */ = {
+			isa = PBXGroup;
+			children = (
+				E30000000000000000000002 /* App */,
+				E30000000000000000000003 /* Views */,
+				E30000000000000000000004 /* Services */,
+				E30000000000000000000005 /* Resources */,
+				C3000000000000000000000F /* ClipAssets.xcassets */,
+				C30000000000000000000006 /* Info.plist */,
+				C30000000000000000000007 /* VoltClip.entitlements */,
+			);
+			path = VoltClip;
+			sourceTree = "<group>";
+		};
+		E30000000000000000000002 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				C30000000000000000000001 /* VoltClipApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		E30000000000000000000003 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				C30000000000000000000002 /* ClipRootView.swift */,
+				3A9C883B0839866C28922BF2 /* ClipCaptureHomeView.swift */,
+				B73317ABE2FE4BAD9AF23D4B /* ClipHistoryView.swift */,
+				E2323E0F3B5ABEF096BF0044 /* ClipWorkspaceTargetView.swift */,
+				8AEADB5488DA1E1DB0E460A8 /* ClipPhotoLibraryUploadView.swift */,
+				101197839C307A14E0CB2C3F /* ClipConnectionView.swift */,
+				66F53F8EF098E7AD0C1363BD /* ClipCaptureSessionView.swift */,
+				7BEE29BC2C5EA0D06414E55C /* ClipCameraView.swift */,
+				73230DB4EF324D9BF73229AF /* ClipPairingScannerView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		E30000000000000000000004 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				C30000000000000000000010 /* AppClipGuestCloudClient.swift */,
+				C3000000000000000000000A /* ClipScannerStore.swift */,
+				C3000000000000000000000D /* ClipBarcodeScannerService.swift */,
+				C3000000000000000000000E /* ClipOCRService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		E30000000000000000000005 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		F00000000000000000000001 /* Volt */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = J00000000000000000000001 /* Build configuration list for PBXNativeTarget "Volt" */;
+			buildPhases = (
+				ACF59E4CAB9307CFE05B947C /* [CP] Check Pods Manifest.lock */,
+				G00000000000000000000001 /* Sources */,
+				D00000000000000000000001 /* Frameworks */,
+				H00000000000000000000001 /* Resources */,
+				E30000000000000000000006 /* Embed App Clips */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				K30000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = Volt;
+			packageProductDependencies = (
+				R40000000000000000000002 /* ClerkKit */,
+				R40000000000000000000003 /* ClerkKitUI */,
+				R50000000000000000000002 /* ConvexMobile */,
+			);
+			productName = Volt;
+			productReference = C00000000000000000000015 /* Volt.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F20000000000000000000001 /* VoltScreenshots */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = J20000000000000000000003 /* Build configuration list for PBXNativeTarget "VoltScreenshots" */;
+			buildPhases = (
+				G20000000000000000000001 /* Sources */,
+				D20000000000000000000002 /* Frameworks */,
+				H20000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				K20000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = VoltScreenshots;
+			productName = VoltScreenshots;
+			productReference = C20000000000000000000003 /* VoltScreenshots.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		F30000000000000000000001 /* VoltClip */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = J30000000000000000000003 /* Build configuration list for PBXNativeTarget "VoltClip" */;
+			buildPhases = (
+				G30000000000000000000001 /* Sources */,
+				D30000000000000000000001 /* Frameworks */,
+				H30000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VoltClip;
+			productName = VoltClip;
+			productReference = C30000000000000000000008 /* VoltClip.app */;
+			productType = "com.apple.product-type.application.on-demand-install-capable";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		I00000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 2650;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					F00000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					F20000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = F00000000000000000000001;
+					};
+					F30000000000000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+				};
+			};
+			buildConfigurationList = J00000000000000000000004 /* Build configuration list for PBXProject "Volt" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E00000000000000000000001;
+			packageReferences = (
+				R40000000000000000000001 /* XCRemoteSwiftPackageReference "clerk-ios" */,
+				R50000000000000000000001 /* XCRemoteSwiftPackageReference "convex-swift" */,
+			);
+			productRefGroup = E00000000000000000000002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F00000000000000000000001 /* Volt */,
+				F30000000000000000000001 /* VoltClip */,
+				F20000000000000000000001 /* VoltScreenshots */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		H00000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B0000000000000000000000F /* Images.xcassets in Resources */,
+				B00000000000000000000010 /* SplashScreen.storyboard in Resources */,
+				B00000000000000000000011 /* PrivacyInfo.xcprivacy in Resources */,
+				B0000000000000000000001B /* volt.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		H20000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		H30000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B30000000000000000000014 /* ClipAssets.xcassets in Resources */,
+				B3000000000000000000001E /* volt.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		ACF59E4CAB9307CFE05B947C /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-Volt-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		G00000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000012 /* CloudPhotoRendition.swift in Sources */,
+				B50000000000000000000003 /* CloudAPIContracts.swift in Sources */,
+				B50000000000000000000002 /* CloudCaptureRecord.swift in Sources */,
+				B50000000000000000000001 /* CloudDeviceCredential.swift in Sources */,
+				B50000000000000000000008 /* CloudWorkspaceStore.swift in Sources */,
+				C214CA7B979DBF36E69A4C4B /* CloudComputerPageChain.swift in Sources */,
+				1CD72A9136FB17BC4048723E /* CloudComputerSubscriptions.swift in Sources */,
+				B70000000000000000000001 /* SpeechDictationService.swift in Sources */,
+				B70000000000000000000002 /* ScannerStoreDictation.swift in Sources */,
+				B50000000000000000000005 /* DeviceCredentialStore.swift in Sources */,
+				B50000000000000000000006 /* DurableCaptureOutbox.swift in Sources */,
+				B50000000000000000000007 /* MobileCloudAPIClient.swift in Sources */,
+				B40000000000000000000001 /* AppConfiguration.swift in Sources */,
+				B40000000000000000000002 /* AccessKind.swift in Sources */,
+				B40000000000000000000003 /* AccessStatus.swift in Sources */,
+				B40000000000000000000004 /* MobileAccessErrorResponse.swift in Sources */,
+				B40000000000000000000005 /* VoltSubscriptionStatus.swift in Sources */,
+				B40000000000000000000006 /* AccessStore.swift in Sources */,
+				B40000000000000000000007 /* MobileAccessAPIClient.swift in Sources */,
+				B40000000000000000000008 /* MobileAccessError.swift in Sources */,
+				B40000000000000000000009 /* StoreKitSubscriptionError.swift in Sources */,
+				B4000000000000000000000A /* StoreKitSubscriptionStore.swift in Sources */,
+				B4000000000000000000000D /* ClerkImagePrefetchModifier.swift in Sources */,
+				B4000000000000000000000E /* SettingsView.swift in Sources */,
+				B4000000000000000000000F /* SubscriptionActionsView.swift in Sources */,
+				B40000000000000000000010 /* VoltRootScene.swift in Sources */,
+				B00000000000000000000001 /* VoltApp.swift in Sources */,
+				B00000000000000000000002 /* CaptureMode.swift in Sources */,
+				B00000000000000000000022 /* CaptureOrientation.swift in Sources */,
+				B00000000000000000000003 /* ScanResult.swift in Sources */,
+				B0000000000000000000001D /* CameraDeviceSelector.swift in Sources */,
+				B0000000000000000000001E /* CameraZoomController.swift in Sources */,
+				B00000000000000000000006 /* CameraModel.swift in Sources */,
+				B0000000000000000000001F /* OcrTextCleaner.swift in Sources */,
+				B00000000000000000000007 /* TextRecognizer.swift in Sources */,
+				B00000000000000000000009 /* ScannerStore.swift in Sources */,
+				B0000000000000000000000A /* CameraPreview.swift in Sources */,
+				B0000000000000000000000B /* RootView.swift in Sources */,
+				B0000000000000000000000C /* ScannerView.swift in Sources */,
+				B70000000000000000000003 /* DictationView.swift in Sources */,
+				B60000000000000000000001 /* CaptureModeCards.swift in Sources */,
+				B60000000000000000000003 /* CloudTargetPickerSheet.swift in Sources */,
+				B60000000000000000000004 /* AuthenticationLandingView.swift in Sources */,
+				B80000000000000000000001 /* QRSignInStore.swift in Sources */,
+				B80000000000000000000002 /* QRSignInView.swift in Sources */,
+				B60000000000000000000005 /* VoltBrand.swift in Sources */,
+				B0000000000000000000000E /* ResultsView.swift in Sources */,
+				B0000000000000000000001C /* ScannerRecognitionModels.swift in Sources */,
+				B10000000000000000000001 /* ScannerStoreCaptureActions.swift in Sources */,
+				B10000000000000000000005 /* CaptureSessionView.swift in Sources */,
+				B1000000000000000000000D /* SharedCameraSessionControls.swift in Sources */,
+				B1000000000000000000000E /* SharedScannerTabComponents.swift in Sources */,
+				B10000000000000000000099 /* SharedPhotoGalleryComponents.swift in Sources */,
+				B10000000000000000000011 /* SharedCaptureSessionOverlays.swift in Sources */,
+				B10000000000000000000006 /* CameraSessionControls.swift in Sources */,
+				B10000000000000000000007 /* ScannerCameraLayer.swift in Sources */,
+				B10000000000000000000010 /* BarcodeDetectionReticle.swift in Sources */,
+				B10000000000000000000008 /* CapturedResultRow.swift in Sources */,
+				B10000000000000000000009 /* CaptureDocks.swift in Sources */,
+				B1000000000000000000000A /* OcrReviewLayer.swift in Sources */,
+				B1000000000000000000000B /* CaptureGuideOverlay.swift in Sources */,
+				B1000000000000000000000C /* ScreenshotFixtures.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		G20000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B20000000000000000000001 /* SnapshotHelper.swift in Sources */,
+				B20000000000000000000002 /* VoltScreenshots.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		G30000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B30000000000000000000024 /* CloudPhotoRendition.swift in Sources */,
+				B30000000000000000000023 /* SpeechDictationService.swift in Sources */,
+				B30000000000000000000021 /* AppClipGuestCloudClient.swift in Sources */,
+				B30000000000000000000001 /* VoltClipApp.swift in Sources */,
+				B30000000000000000000002 /* ClipRootView.swift in Sources */,
+				CB0F85194A68BB4736C9C1B9 /* ClipCaptureHomeView.swift in Sources */,
+				2051B55CB680441B6C713695 /* ClipHistoryView.swift in Sources */,
+				7630DE11C6C33C84FCFDBE33 /* ClipWorkspaceTargetView.swift in Sources */,
+				6067E81E459E6CD6D4921CC6 /* ClipPhotoLibraryUploadView.swift in Sources */,
+				74E0487E157924E7D8DC2533 /* ClipConnectionView.swift in Sources */,
+				2F7FFBDAC817614C017440E7 /* ClipCaptureSessionView.swift in Sources */,
+				A65043AECFD96D30E7BC2EC2 /* ClipCameraView.swift in Sources */,
+				4FE7C1B775254B342AFA247F /* ClipPairingScannerView.swift in Sources */,
+				B30000000000000000000006 /* ClipScannerStore.swift in Sources */,
+				B3000000000000000000000F /* ClipBarcodeScannerService.swift in Sources */,
+				B30000000000000000000010 /* ClipOCRService.swift in Sources */,
+				B30000000000000000000011 /* SharedCameraSessionControls.swift in Sources */,
+				B30000000000000000000012 /* SharedScannerTabComponents.swift in Sources */,
+				B30000000000000000000099 /* SharedPhotoGalleryComponents.swift in Sources */,
+				B30000000000000000000013 /* SharedPairingSessionComponents.swift in Sources */,
+				B30000000000000000000015 /* ScannerRecognitionModels.swift in Sources */,
+				B30000000000000000000025 /* TextRecognizer.swift in Sources */,
+				B30000000000000000000017 /* CameraSessionControls.swift in Sources */,
+				B30000000000000000000018 /* CaptureGuideOverlay.swift in Sources */,
+				B30000000000000000000019 /* OcrReviewLayer.swift in Sources */,
+				B30000000000000000000016 /* BarcodeDetectionReticle.swift in Sources */,
+				B3000000000000000000000A /* CaptureMode.swift in Sources */,
+				B30000000000000000000022 /* CaptureOrientation.swift in Sources */,
+				B3000000000000000000000B /* PairingSession.swift in Sources */,
+				B3000000000000000000000C /* PairingURLParser.swift in Sources */,
+				B3000000000000000000001A /* CameraDeviceSelector.swift in Sources */,
+				B3000000000000000000001B /* CameraZoomController.swift in Sources */,
+				B3000000000000000000001C /* OcrTextCleaner.swift in Sources */,
+				B3000000000000000000001D /* SharedCaptureSessionOverlays.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		K20000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F00000000000000000000001 /* Volt */;
+			targetProxy = D20000000000000000000001 /* PBXContainerItemProxy */;
+		};
+		K30000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F30000000000000000000001 /* VoltClip */;
+			targetProxy = D40000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		J00000000000000000000002 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 577C15430A95FB0B1F9D6C10 /* Pods-Volt.debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = volt;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Volt/Volt.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 75;
+				DEVELOPMENT_TEAM = GB5SPLUARQ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Volt/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = com.volt.mobile;
+				PRODUCT_NAME = Volt;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VERSIONING_SYSTEM = "apple-generic";
+				VOLT_APP_STORE_ID = 6771770148;
+				VOLT_CLERK_FRONTEND_API_DOMAIN = clerk.voltresale.app;
+				VOLT_CLERK_JWT_TEMPLATE = convex;
+				VOLT_CONVEX_SITE_URL = "https://adorable-hornet-19.convex.site";
+				VOLT_STOREKIT_PRODUCT_ID = com.volt.mobile.pro.monthly;
+			};
+			name = Debug;
+		};
+		J00000000000000000000003 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = C2FE1E81FC70D4D44558094E /* Pods-Volt.release.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = volt;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Volt/Volt.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 75;
+				DEVELOPMENT_TEAM = GB5SPLUARQ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Volt/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = com.volt.mobile;
+				PRODUCT_NAME = Volt;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VOLT_APP_STORE_ID = 6771770148;
+				VOLT_CLERK_FRONTEND_API_DOMAIN = clerk.voltresale.app;
+				VOLT_CLERK_JWT_TEMPLATE = convex;
+				VOLT_CONVEX_SITE_URL = "https://sincere-trout-414.convex.site";
+				VOLT_STOREKIT_PRODUCT_ID = com.volt.mobile.pro.monthly;
+			};
+			name = Release;
+		};
+		J00000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				OTHER_CFLAGS = "$(inherited)";
+				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
+			};
+			name = Debug;
+		};
+		J00000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				OTHER_CFLAGS = "$(inherited)";
+				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
+			};
+			name = Release;
+		};
+		J20000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 75;
+				DEVELOPMENT_TEAM = GB5SPLUARQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = VoltScreenshots;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.volt.mobile.screenshots;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Volt;
+			};
+			name = Debug;
+		};
+		J20000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 75;
+				DEVELOPMENT_TEAM = GB5SPLUARQ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = VoltScreenshots;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.volt.mobile.screenshots;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Volt;
+			};
+			name = Release;
+		};
+		J30000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = volt;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = VoltClip/VoltClip.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 75;
+				DEVELOPMENT_TEAM = GB5SPLUARQ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VoltClip/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = com.volt.mobile.Clip;
+				PRODUCT_NAME = VoltClip;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		J30000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = volt;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = VoltClip/VoltClip.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 75;
+				DEVELOPMENT_TEAM = GB5SPLUARQ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = VoltClip/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.18;
+				PRODUCT_BUNDLE_IDENTIFIER = com.volt.mobile.Clip;
+				PRODUCT_NAME = VoltClip;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		J00000000000000000000001 /* Build configuration list for PBXNativeTarget "Volt" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				J00000000000000000000002 /* Debug */,
+				J00000000000000000000003 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		J00000000000000000000004 /* Build configuration list for PBXProject "Volt" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				J00000000000000000000005 /* Debug */,
+				J00000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		J20000000000000000000003 /* Build configuration list for PBXNativeTarget "VoltScreenshots" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				J20000000000000000000001 /* Debug */,
+				J20000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		J30000000000000000000003 /* Build configuration list for PBXNativeTarget "VoltClip" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				J30000000000000000000001 /* Debug */,
+				J30000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		R40000000000000000000001 /* XCRemoteSwiftPackageReference "clerk-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/clerk/clerk-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.3.0;
+			};
+		};
+		R50000000000000000000001 /* XCRemoteSwiftPackageReference "convex-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/get-convex/convex-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.8.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		R40000000000000000000002 /* ClerkKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = R40000000000000000000001 /* XCRemoteSwiftPackageReference "clerk-ios" */;
+			productName = ClerkKit;
+		};
+		R40000000000000000000003 /* ClerkKitUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = R40000000000000000000001 /* XCRemoteSwiftPackageReference "clerk-ios" */;
+			productName = ClerkKitUI;
+		};
+		R50000000000000000000002 /* ConvexMobile */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = R50000000000000000000001 /* XCRemoteSwiftPackageReference "convex-swift" */;
+			productName = ConvexMobile;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = I00000000000000000000001 /* Project object */;
+}

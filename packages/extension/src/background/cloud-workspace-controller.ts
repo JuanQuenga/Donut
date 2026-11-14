@@ -1,0 +1,327 @@
+import { isTrustedExtensionPageSender, type ExtensionMessageSender } from "../access/sender-policy";
+import { createWorkspaceSync } from "../cloud-scanner/workspace-sync.ts";
+
+const WORKSPACE_OFFSCREEN_LIVENESS_ALARM = "volt.cloudScanner.offscreenLiveness";
+
+type WorkspaceMessage =
+  | { action: "workspaceCreateEnrollment"; label: string }
+  | { action: "workspaceReconcile" }
+  | { action: "workspaceGetPhotoDownload"; batchId: string; resultId: string }
+  | { action: "workspaceDeleteResults"; resultIds: string[] }
+  | { action: "workspaceRestoreResults"; resultIds: string[] };
+
+type ControllerOptions = {
+  chromeApi: typeof chrome;
+  ensureOffscreenDocument: () => Promise<boolean>;
+  handleCursorDeliveries: (deliveries: unknown) => Promise<void>;
+  handleLiveDictationDrafts: (drafts: unknown) => Promise<void>;
+  handleSignInRequests?: (requests: unknown) => Promise<void>;
+  sendOffscreenMessage: (message: unknown) => Promise<unknown>;
+  log?: (...args: unknown[]) => void;
+};
+
+function recordFrom(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function parseMessage(value: unknown): WorkspaceMessage | null {
+  const record = recordFrom(value);
+  if (record?.action === "workspaceReconcile") return { action: record.action };
+  if (record?.action === "workspaceGetPhotoDownload") {
+    return typeof record.batchId === "string" && typeof record.resultId === "string"
+      ? { action: record.action, batchId: record.batchId, resultId: record.resultId }
+      : null;
+  }
+  if (record?.action === "workspaceDeleteResults" || record?.action === "workspaceRestoreResults") {
+    const resultIds = Array.isArray(record.resultIds)
+      ? record.resultIds.filter((id): id is string => typeof id === "string" && id.length > 0).slice(0, 100)
+      : [];
+    return resultIds.length > 0 ? { action: record.action, resultIds } : null;
+  }
+  if (record?.action !== "workspaceCreateEnrollment") return null;
+  return {
+    action: record.action,
+    label: typeof record.label === "string" && record.label.trim()
+      ? record.label.trim().slice(0, 80)
+      : "Donut for iPhone",
+  };
+}
+
+export function createCloudWorkspaceController(options: ControllerOptions) {
+  let snapshotGeneration = 0;
+  let account: { kind: "unconfirmed"; epoch: string } | { kind: "confirmed"; epoch: string; subject: string | null } = { kind: "unconfirmed", epoch: crypto.randomUUID() };
+  const log = options.log ?? ((...args: unknown[]) => console.warn("[Volt Cloud Workspace]", ...args));
+  // Shared with the sidepanel, which subscribes to Convex itself; the sync
+  // module serializes both writers so either context can apply a snapshot.
+  const sync = createWorkspaceSync({
+    chromeApi: options.chromeApi,
+    getPhotoDownload: (batchId, resultId) => getPhotoDownload(batchId, resultId),
+  });
+
+  function applySnapshot(payload: unknown) {
+    if (account.kind !== "confirmed" || account.subject === null) return Promise.resolve(null);
+    const generation = snapshotGeneration;
+    return sync.applySnapshot(payload, { subject: account.subject, isCurrent: () => generation === snapshotGeneration });
+  }
+
+  async function relayOffscreenOperation(message: unknown) {
+    const response = await options.sendOffscreenMessage(message);
+    const record = recordFrom(response);
+    if (record?.success !== true) {
+      throw new Error(
+        typeof record?.error === "string"
+          ? record.error
+          : "Cloud workspace operation failed.",
+      );
+    }
+    return record.value;
+  }
+
+  async function createEnrollment(label: string) {
+    const payload = await relayOffscreenOperation({
+      action: "workspaceOffscreenCreateEnrollment",
+      label,
+    });
+    const record = recordFrom(payload);
+    const enrollmentCode = typeof record?.enrollmentCode === "string" ? record.enrollmentCode : null;
+    const expiresAt = typeof record?.expiresAt === "number" ? record.expiresAt : null;
+    if (!enrollmentCode || expiresAt === null) throw new Error("Enrollment response omitted required fields.");
+    return {
+      enrollmentCode,
+      enrollmentUrl: `volt://enroll?enrollmentToken=${encodeURIComponent(enrollmentCode)}`,
+      expiresAt,
+    };
+  }
+
+  async function reconcileWorkspace() {
+    const generation = snapshotGeneration;
+    const response = await options.sendOffscreenMessage({
+      action: "workspaceOffscreenReconcile",
+    });
+    const record = recordFrom(response);
+    if (record?.success !== true) {
+      throw new Error(
+        typeof record?.error === "string"
+          ? record.error
+          : "Cloud workspace reconciliation failed.",
+      );
+    }
+    if (!acceptsAccountPayload(record)) return null;
+    if (record.snapshot === undefined || record.snapshot === null) return null;
+    if (generation !== snapshotGeneration) return null;
+    return applySnapshot(record.snapshot);
+  }
+
+  async function handleAccountChanged(subject: string | null, epoch: unknown) {
+    if (epoch !== account.epoch) throw new Error("stale_workspace_account_confirmation");
+    snapshotGeneration += 1;
+    const generation = snapshotGeneration;
+    const currentEpoch = account.epoch;
+    account = { kind: "unconfirmed", epoch: currentEpoch };
+    await sync.bindAccount(subject, { isCurrent: () => generation === snapshotGeneration });
+    if (generation !== snapshotGeneration) throw new Error("stale_workspace_account_confirmation");
+    account = { kind: "confirmed", epoch: currentEpoch, subject };
+  }
+
+  function acceptsAccountPayload(record: Record<string, unknown>) {
+    return account.kind === "confirmed" && account.subject !== null
+      && record.subject === account.subject && record.accountEpoch === account.epoch;
+  }
+
+  async function getPhotoDownload(batchId: string, resultId: string) {
+    const payload = await relayOffscreenOperation({
+      action: "workspaceOffscreenCreatePhotoDownloadUrl",
+      batchId,
+      resultId,
+    });
+    const record = recordFrom(payload);
+    if (typeof record?.url !== "string" || (record.method !== undefined && record.method !== "GET")) {
+      throw new Error("Photo download response was invalid.");
+    }
+    const headers = recordFrom(record.headers) ?? {};
+    return {
+      url: record.url,
+      headers: Object.fromEntries(
+        Object.entries(headers).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+      ),
+      expiresAt: typeof record.expiresAt === "number" ? record.expiresAt : undefined,
+    };
+  }
+
+  function deleteResults(resultIds: string[]) {
+    return relayOffscreenOperation({
+      action: "workspaceOffscreenDeleteResults",
+      resultIds,
+    });
+  }
+
+  function restoreResults(resultIds: string[]) {
+    return relayOffscreenOperation({
+      action: "workspaceOffscreenRestoreResults",
+      resultIds,
+    });
+  }
+
+  // Offscreen documents have no chrome.storage, so their reads and writes are
+  // served from here. Both the Clerk token cache and this computer's install id
+  // live in that store; a document left to its own devices minted a second
+  // install id and listened for scans on a computer the phone never targets.
+  async function offscreenStorage(record: Record<string, unknown>) {
+    const keys = Array.isArray(record.keys)
+      ? record.keys.filter((key): key is string => typeof key === "string" && key.length > 0)
+      : [];
+    if (record.operation === "get") {
+      if (keys.length === 0) throw new Error("Storage request omitted a key.");
+      return await options.chromeApi.storage.local.get(keys);
+    }
+    if (record.operation === "set") {
+      const values = recordFrom(record.values);
+      if (!values) throw new Error("Storage request omitted values.");
+      await options.chromeApi.storage.local.set(values);
+      return null;
+    }
+    if (record.operation === "remove") {
+      if (keys.length === 0) throw new Error("Storage request omitted a key.");
+      await options.chromeApi.storage.local.remove(keys);
+      return null;
+    }
+    throw new Error("Storage request used an unknown operation.");
+  }
+
+  function handleMessage(
+    rawMessage: unknown,
+    sender: ExtensionMessageSender,
+    sendResponse: (response?: unknown) => void,
+  ) {
+    const rawRecord = recordFrom(rawMessage);
+    const isOffscreenMessage =
+      rawRecord?.action === "workspaceOffscreenSnapshotChanged"
+      || rawRecord?.action === "workspaceOffscreenCursorDeliveriesChanged"
+      || rawRecord?.action === "workspaceOffscreenDictationDraftsChanged"
+      || rawRecord?.action === "workspaceOffscreenSignInRequestsChanged"
+      || rawRecord?.action === "workspaceOffscreenAccountChanged"
+      || rawRecord?.action === "workspaceOffscreenStorage";
+    if (isOffscreenMessage) {
+      if (!isTrustedExtensionPageSender(
+        sender,
+        options.chromeApi.runtime.id,
+        ["/offscreen.html"],
+      )) {
+        sendResponse({ success: false, error: "unauthorized_extension_sender" });
+        return true;
+      }
+      const operation = (() => {
+        switch (rawRecord.action) {
+          case "workspaceOffscreenSnapshotChanged":
+            if (!acceptsAccountPayload(rawRecord)) return Promise.resolve(null);
+            return applySnapshot(rawRecord.snapshot);
+          case "workspaceOffscreenCursorDeliveriesChanged":
+            if (!acceptsAccountPayload(rawRecord)) return Promise.resolve(null);
+            return options.handleCursorDeliveries(rawRecord.deliveries);
+          case "workspaceOffscreenDictationDraftsChanged":
+            if (!acceptsAccountPayload(rawRecord)) return Promise.resolve(null);
+            return options.handleLiveDictationDrafts(rawRecord.drafts);
+          case "workspaceOffscreenSignInRequestsChanged":
+            if (!acceptsAccountPayload(rawRecord)) return Promise.resolve(null);
+            return options.handleSignInRequests?.(rawRecord.requests) ?? Promise.resolve();
+          case "workspaceOffscreenStorage":
+            return offscreenStorage(rawRecord);
+          default:
+            return handleAccountChanged(
+              typeof rawRecord.subject === "string" ? rawRecord.subject : null,
+              rawRecord.accountEpoch,
+            );
+        }
+      })();
+      void operation
+        .then((value) => sendResponse({ success: true, value }))
+        .catch((error: unknown) => sendResponse({
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        }));
+      return true;
+    }
+
+    const message = parseMessage(rawMessage);
+    if (!message) return false;
+    if (!isTrustedExtensionPageSender(
+      sender,
+      options.chromeApi.runtime.id,
+      ["/mobile-scanner-popup.html", "/sidepanel.html"],
+    )) {
+      sendResponse({ success: false, error: "unauthorized_extension_sender" });
+      return true;
+    }
+    const operation = (() => {
+      switch (message.action) {
+        case "workspaceCreateEnrollment": return createEnrollment(message.label);
+        case "workspaceReconcile": return reconcileWorkspace();
+        case "workspaceGetPhotoDownload": return getPhotoDownload(message.batchId, message.resultId);
+        case "workspaceDeleteResults": return deleteResults(message.resultIds);
+        case "workspaceRestoreResults": return restoreResults(message.resultIds);
+      }
+    })();
+    void operation
+      .then((value) => sendResponse({ success: true, value }))
+      .catch((error: unknown) => sendResponse({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    return true;
+  }
+
+  // Creating the offscreen document is not enough on its own: it can survive
+  // while its Convex subscriptions are gone (a failed start, a torn-down
+  // socket, an auth pass that stopped them). start() is idempotent, so the
+  // liveness heartbeat re-asserts them rather than waiting for a service
+  // worker restart.
+  async function startSubscriptions(accountChanged = false) {
+    try {
+      const response = await options.sendOffscreenMessage({
+        action: "workspaceOffscreenStartSubscriptions",
+        accountChanged,
+        accountEpoch: account.epoch,
+      });
+      const record = recordFrom(response);
+      if (record?.success !== true) {
+        const detail = typeof record?.error === "string" ? record.error : "no_response";
+        log("Workspace subscription start failed", detail);
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      log("Workspace subscription start failed", detail);
+    }
+  }
+
+  return {
+    alarmName: WORKSPACE_OFFSCREEN_LIVENESS_ALARM,
+    handleAlarm: async () => {
+      const ready = await options.ensureOffscreenDocument();
+      if (ready) await startSubscriptions();
+      return ready;
+    },
+    handleMessage,
+    /** Changes whenever the signed-in account may have; requests tagged with an older one are stale. */
+    accountEpoch: () => account.epoch,
+    // The offscreen document cannot watch chrome.storage for the mirrored
+    // client JWT, so the account change has to be pushed to it from here.
+    handleAccountSessionChanged: async () => {
+      snapshotGeneration += 1;
+      account = { kind: "unconfirmed", epoch: crypto.randomUUID() };
+      const ready = await options.ensureOffscreenDocument();
+      if (ready) await startSubscriptions(true);
+      return ready;
+    },
+    initialize: async () => {
+      // Upgraded installs may still carry the retired HTTP-heartbeat alarm.
+      await options.chromeApi.alarms.clear("volt.cloudScanner.computerPresence").catch(() => false);
+      await options.chromeApi.alarms.create(WORKSPACE_OFFSCREEN_LIVENESS_ALARM, {
+        delayInMinutes: 1,
+        periodInMinutes: 1,
+      });
+      await startSubscriptions();
+    },
+  };
+}
