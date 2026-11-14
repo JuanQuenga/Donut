@@ -78,6 +78,13 @@ releases the current `main` branch. Run it from the Actions tab or with:
 gh workflow run "Publish Chrome Extension" -R JuanQuenga/Donut --ref main
 ```
 
+Set the `dry_run` input to `true` to check the Google and Chrome Web Store
+credentials without building, uploading, or submitting anything:
+
+```sh
+gh workflow run "Publish Chrome Extension" -R JuanQuenga/Donut --ref main -f dry_run=true
+```
+
 Configure these GitHub repository variables:
 
 - `CWS_EXTENSION_ID`

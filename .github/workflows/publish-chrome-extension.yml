@@ -3,6 +3,11 @@ name: Publish Chrome Extension
 on:
   workflow_dispatch:
     inputs:
+      dry_run:
+        description: Only authenticate and print the next store version; build, upload, and submit nothing
+        required: true
+        type: boolean
+        default: false
       submit_existing_draft:
         description: Submit the package already uploaded to Chrome without building or uploading another version
         required: true
@@ -94,7 +99,12 @@ jobs:
           SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
           PUBLISH_TYPE: ${{ inputs.publish_type }}
           REPLACE_PENDING_SUBMISSION: ${{ inputs.replace_pending_submission }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
+          if [[ "${DRY_RUN}" == "true" ]]; then
+            pnpm release:extension:dry-run
+            exit 0
+          fi
           release_args=("--publish-type=${PUBLISH_TYPE}")
           if [[ "${SUBMIT_EXISTING_DRAFT}" == "true" ]]; then
             if [[ "${SUBMIT_FOR_REVIEW}" != "true" ]]; then
@@ -117,7 +127,7 @@ jobs:
           pnpm release:extension -- "${release_args[@]}"
 
       - name: Retain release zip
-        if: ${{ always() && inputs.submit_existing_draft == false }}
+        if: ${{ always() && inputs.submit_existing_draft == false && inputs.dry_run == false }}
         uses: actions/upload-artifact@v4
         with:
           name: volt-chrome-extension
@@ -130,7 +140,7 @@ jobs:
       # Non-fatal: the store submission already happened, so a GitHub hiccup here must not
       # make the run look like a failed release (and invite a --replace-pending rerun).
       - name: Attach build to GitHub release
-        if: ${{ success() && inputs.submit_existing_draft == false }}
+        if: ${{ success() && inputs.submit_existing_draft == false && inputs.dry_run == false }}
         continue-on-error: true
         shell: bash
         env:
