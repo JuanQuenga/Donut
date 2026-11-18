@@ -8,9 +8,9 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllEnvs());
 
-test("every account has seven-day history and the free storage limits", () => {
+test("every account has three-day history and the free storage limits", () => {
   expect(accountPolicy().workspace).toEqual({
-    retentionDays: 7,
+    retentionDays: 3,
     recordsLimit: 1_000,
     bytesLimit: 104_857_600,
   });
@@ -25,7 +25,7 @@ test("free storage limits accept environment overrides", () => {
   vi.stubEnv("WORKSPACE_FREE_RECORD_LIMIT", "250");
   vi.stubEnv("WORKSPACE_FREE_BYTE_LIMIT", "2097152");
   expect(accountPolicy().workspace).toEqual({
-    retentionDays: 7,
+    retentionDays: 3,
     recordsLimit: 250,
     bytesLimit: 2_097_152,
   });

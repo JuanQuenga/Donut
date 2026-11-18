@@ -23,12 +23,12 @@ import {
   uploadViewSwiftSource,
 } from "./native-source-fixtures.mjs";
 
-test("iPhone history is a rolling 7-day window that never drops unsent captures", () => {
-  assert.match(durableCaptureOutboxSwiftSource, /static let historyRetention: TimeInterval = 7 \* 24 \* 60 \* 60/);
+test("iPhone history is a rolling 3-day window that never drops unsent captures", () => {
+  assert.match(durableCaptureOutboxSwiftSource, /static let historyRetention: TimeInterval = 3 \* 24 \* 60 \* 60/);
   assert.match(durableCaptureOutboxSwiftSource, /records\.filter \{ \$0\.state == \.uploaded && \$0\.capturedAt < cutoff \}/);
   assert.match(scannerStoreSwiftSource, /pruneExpiredHistory\(\)\s*self\.results = cloudWorkspace\.restoredResults/);
   assert.match(rootViewSwiftSource, /case \.active:[\s\S]*store\.pruneExpiredHistory\(\)[\s\S]*case \.background:/);
-  assert.match(settingsViewSwiftSource, /Captures are kept for 7 days\./);
+  assert.match(settingsViewSwiftSource, /Captures are kept for 3 days\./);
 });
 
 test("AI mode stays out of the iOS app while cloud access stays free", () => {

@@ -17,8 +17,8 @@ const highlights = [
   },
   {
     icon: History,
-    title: "Free, with 7-day history",
-    body: "Every account gets every feature. Captures clear after 7 days.",
+    title: "Free, with 3-day history",
+    body: "Every account gets every feature. Captures clear after 3 days.",
   },
 ];
 

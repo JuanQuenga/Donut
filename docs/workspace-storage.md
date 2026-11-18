@@ -1,6 +1,6 @@
 # Workspace storage
 
-Every signed-in account has free capture sync and a rolling seven-day history. The default limits are 1,000 stored captures and 100 MiB per workspace. Legacy StoreKit subscriptions affect AI allowances only; they do not extend history or restrict workspace writes.
+Every signed-in account has free capture sync and a rolling three-day history. The default limits are 1,000 stored captures and 100 MiB per workspace. Legacy StoreKit subscriptions affect AI allowances only; they do not extend history or restrict workspace writes.
 
 ## Configuration
 
@@ -8,9 +8,9 @@ Every signed-in account has free capture sync and a rolling seven-day history. T
 
 ## Storage lifecycle
 
-Managed captures expire seven days after server receipt. The iPhone removes uploaded captures from its local history on the same window and keeps anything not yet uploaded. Retention tombstones cannot be restored.
+Managed captures expire three days after server receipt. The iPhone removes uploaded captures from its local history on the same window and keeps anything not yet uploaded. Retention tombstones cannot be restored.
 
-Rows without `storageManaged` remain excluded from automated retention and managed counters until enrolled. `workspaceStorage:enrollLegacyHistory` enrolls those captures onto the seven-day window in bounded pages and supports a dry run. Run `workspaceStorage:recountWorkspaceStorage` afterwards to rebuild the workspace counters. Review and communicate the migration before running it on existing captures.
+Rows without `storageManaged` remain excluded from automated retention and managed counters until enrolled. `workspaceStorage:enrollLegacyHistory` enrolls those captures onto the three-day window in bounded pages and supports a dry run. Run `workspaceStorage:recountWorkspaceStorage` afterwards to rebuild the workspace counters. Review and communicate the migration before running it on existing captures.
 
 Quota reservations are transactional across device/guest upload, append and restore paths. Text size is calculated from UTF-8 content. Photos require a positive declared size of at most 10 MiB and an exact HEAD size match at finalization. Caps bound validated logical storage: presigned PUT does not impose a hard R2 payload limit. Rejected/unfinalized oversized objects need operational monitoring; a bounded upload gateway and orphan-object sweep remain follow-up work.
 

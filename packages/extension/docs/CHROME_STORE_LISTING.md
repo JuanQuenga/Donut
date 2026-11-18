@@ -67,4 +67,4 @@ PRIVACY
 
 Most functionality runs locally in the browser. Tabs, bookmarks, and history are read only to populate the command palette and new tab, and are not transmitted. Mobile captures sync only for the signed-in account. Full policy: https://voltresale.app/privacy
 
-Cloud workspace and mobile capture sync are free for every signed-in account, with seven days of rolling capture history. Existing App Store subscriptions remain supported for legacy AI allowances. The extension's browser features are free.
+Cloud workspace and mobile capture sync are free for every signed-in account, with three days of rolling capture history. Existing App Store subscriptions remain supported for legacy AI allowances. The extension's browser features are free.

@@ -31,7 +31,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Scanning")
                 } footer: {
-                    Text("Captures are kept for 7 days.")
+                    Text("Captures are kept for 3 days.")
                 }
 
                 SubscriptionActionsView()

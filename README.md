@@ -16,7 +16,7 @@ Donut combines market search, offer calculation, and listing helpers in a Chrome
 - Sync captures to your account workspace and insert text into a selected Chrome computer.
 - Open tabs, bookmarks, history, and tools from a keyboard-driven command menu.
 
-Donut is free and actively developed. Every signed-in account gets every feature, including scanning, capture sync, and the cloud workspace, with a rolling seven-day capture history. The App Clip offers temporary capture through a workspace guest grant from signed-in Chrome. See [authentication and access](docs/authentication.md) for how accounts and access work.
+Donut is free and actively developed. Every signed-in account gets every feature, including scanning, capture sync, and the cloud workspace, with a rolling three-day capture history. The App Clip offers temporary capture through a workspace guest grant from signed-in Chrome. See [authentication and access](docs/authentication.md) for how accounts and access work.
 
 ## Start contributing
 

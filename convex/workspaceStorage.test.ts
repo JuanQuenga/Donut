@@ -122,11 +122,11 @@ test("free writes use server UTF-8 bytes and retries do not reserve twice", asyn
     storageManaged: true,
     retentionTier: "free",
     byteCount: 6,
-    expiresAt: Date.now() + 7 * DAY,
+    expiresAt: Date.now() + 3 * DAY,
   });
 });
 
-test("free records expire after seven days; expired rows cannot restore or finalize", async () => {
+test("free records expire after the retention window; expired rows cannot restore or finalize", async () => {
   const t = convexTest(schema, modules);
   const { signedIn, credential } = await owner(t);
   await capture(t, credential);
@@ -165,13 +165,13 @@ test("legacy results stay protected and disabling rollout keeps new results unma
   ).not.toHaveProperty("deletedAt");
 });
 
-test("legacy subscriptions do not exempt captures from the 7-day window", async () => {
+test("legacy subscriptions do not exempt captures from the 3-day window", async () => {
   const t = convexTest(schema, modules);
   const { signedIn, credential } = await owner(t);
   await capture(t, credential, "before-grant");
   await grantLegacySubscription(t, "owner");
   await capture(t, credential, "after-grant");
-  vi.setSystemTime(Date.now() + 6 * DAY);
+  vi.setSystemTime(Date.now() + 2 * DAY);
   expect(await t.mutation(sweep, {})).toBe(0);
   vi.setSystemTime(Date.now() + 2 * DAY);
   expect(await t.mutation(sweep, {})).toBe(2);
@@ -258,7 +258,7 @@ test("recounting after legacy enrollment keeps expiring captures from erasing ne
   vi.stubEnv("WORKSPACE_STORAGE_POLICY_ENABLED", "false");
   await capture(t, credential, "legacy");
   vi.stubEnv("WORKSPACE_STORAGE_POLICY_ENABLED", "true");
-  vi.setSystemTime(Date.now() + 3 * DAY);
+  vi.setSystemTime(Date.now() + DAY);
   await capture(t, credential, "new");
   await t.mutation(enroll, { cursor: null, dryRun: false });
   expect(await signedIn.query(usage, {})).toMatchObject({ recordsUsed: 1, bytesUsed: 3 });
@@ -266,7 +266,7 @@ test("recounting after legacy enrollment keeps expiring captures from erasing ne
   expect(await t.mutation(recount, { workspaceId })).toEqual({ records: 2, bytes: 13 });
   expect(await signedIn.query(usage, {})).toMatchObject({ recordsUsed: 2, bytesUsed: 13 });
 
-  vi.setSystemTime(Date.now() + 5 * DAY);
+  vi.setSystemTime(Date.now() + 2.5 * DAY);
   expect(await t.mutation(sweep, {})).toBe(1);
   expect(await signedIn.query(usage, {})).toMatchObject({ recordsUsed: 1, bytesUsed: 13 });
 });
@@ -429,7 +429,7 @@ test("quotas and restore never cross account boundaries", async () => {
   });
 });
 
-test("historical workspace-tier captures use seven-day retention without restricting writes", async () => {
+test("historical workspace-tier captures use three-day retention without restricting writes", async () => {
   const t = convexTest(schema, modules);
   const { signedIn, credential } = await owner(t);
   await capture(t, credential, "historical-photo", "photo");
@@ -440,7 +440,7 @@ test("historical workspace-tier captures use seven-day retention without restric
     await ctx.db.patch(photo._id, { retentionTier: "workspace", expiresAt: undefined });
   });
 
-  vi.setSystemTime(Date.now() + 6 * DAY);
+  vi.setSystemTime(Date.now() + 2 * DAY);
   expect(await t.mutation(sweep, {})).toBe(0);
   await capture(t, credential, "new-capture");
   expect(await signedIn.query(usage, {})).toMatchObject({ recordsUsed: 2 });
@@ -460,11 +460,22 @@ test("historical workspace-tier captures use seven-day retention without restric
   });
 });
 
-test("snapshot and batch reads redact expired payloads before the sweep runs", async () => {
+// Snapshot pages never read the clock so Convex can cache them (see cloudWorkspace/snapshot.ts);
+// they redact a capture once sweepRetention (every 5 minutes) has expired it. Per-batch reads,
+// which are not long-lived subscriptions, still redact before the sweep.
+test("snapshot reads redact expired payloads once the sweep runs; batch reads redact before it", async () => {
   const t = convexTest(schema, modules);
   const { signedIn, credential } = await owner(t);
   await capture(t, credential, "private-text");
-  vi.setSystemTime(Date.now() + 7 * DAY);
+  vi.setSystemTime(Date.now() + 3 * DAY);
+  const rows = await signedIn.query(api.cloudWorkspace.listBatchResults, {
+    batchId: "private-text",
+  });
+  expect(rows[0]).not.toHaveProperty("text");
+  expect(
+    await t.run((ctx) => ctx.db.query("scanResults").unique()),
+  ).not.toHaveProperty("deletedAt");
+  expect(await t.mutation(sweep, {})).toBe(1);
   const page = await signedIn.query(api.cloudWorkspace.workspaceSnapshotPage, {
     kind: "results",
     cursor: null,
@@ -484,11 +495,26 @@ test("snapshot and batch reads redact expired payloads before the sweep runs", a
     deliveryState: "deleted",
   });
   expect(snapshot?.batches[0].results[0]).not.toHaveProperty("value");
-  const rows = await signedIn.query(api.cloudWorkspace.listBatchResults, {
-    batchId: "private-text",
+});
+
+test("a retention backlog drains in one scheduled chain instead of 100 rows per cron tick", async () => {
+  const t = convexTest(schema, modules);
+  const { signedIn, credential } = await owner(t);
+  await capture(t, credential, "seed");
+  await t.run(async (ctx) => {
+    const seed = await ctx.db.query("scanResults").unique();
+    if (!seed) throw new Error("Expected the seed capture");
+    const { _id, _creationTime, ...row } = seed;
+    for (let index = 0; index < 249; index++) {
+      await ctx.db.insert("scanResults", { ...row, resultId: `backlog-${index}` });
+    }
   });
-  expect(rows[0]).not.toHaveProperty("text");
-  expect(
-    await t.run((ctx) => ctx.db.query("scanResults").unique()),
-  ).not.toHaveProperty("deletedAt");
+  vi.setSystemTime(Date.now() + 4 * DAY);
+  expect(await t.mutation(sweep, {})).toBe(100);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  const rows = await t.run((ctx) => ctx.db.query("scanResults").collect());
+  expect(rows).toHaveLength(250);
+  expect(rows.every((row) => row.deletedAt !== undefined)).toBe(true);
+  const page = await signedIn.query(api.cloudWorkspace.workspaceSnapshotPage, { kind: "results", cursor: null });
+  expect(page?.kind === "results" && page.items.every((item) => item.deliveryState === "deleted" && !("value" in item))).toBe(true);
 });

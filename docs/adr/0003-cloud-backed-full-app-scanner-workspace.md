@@ -2,7 +2,7 @@
 
 ## Monetization update
 
-Free workspace access supersedes this ADR's Pro-only cloud access assumption. Signed-in accounts can sync captures, enroll devices, and use the dashboard without a paid entitlement. See [workspace storage](../workspace-storage.md) for the current seven-day history, quotas, and cleanup. The retention defaults below describe the original design.
+Free workspace access supersedes this ADR's Pro-only cloud access assumption. Signed-in accounts can sync captures, enroll devices, and use the dashboard without a paid entitlement. See [workspace storage](../workspace-storage.md) for the current three-day history, quotas, and cleanup. The retention defaults below describe the original design.
 
 ## Status
 
@@ -74,7 +74,7 @@ A result becomes `available` only after required metadata is committed and any r
 
 ## Entitlement and Quota
 
-Any signed-in account can use local scanning, cloud workspace, and mobile capture sync for free with seven days of rolling capture history. Legacy Pro comes only from a verified StoreKit subscription and provides unlimited monthly AI analyses. Convex authorizes cloud storage, synchronization, computer targeting, and result publication by account identity. Extension browser features remain free.
+Any signed-in account can use local scanning, cloud workspace, and mobile capture sync for free with three days of rolling capture history. Legacy Pro comes only from a verified StoreKit subscription and provides unlimited monthly AI analyses. Convex authorizes cloud storage, synchronization, computer targeting, and result publication by account identity. Extension browser features remain free.
 
 StoreKit transactions remain verified server-side and tied to the account's stable `appAccountToken`. A client-supplied product id, receipt claim, or local StoreKit state cannot grant access by itself. Idempotent quota reservations prevent retries from consuming allowance more than once.
 

@@ -5,7 +5,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import { mobileAppDownloadUrl } from "../../site-chrome";
-import { captureActivity } from "../../lib/dashboard";
+import { CAPTURE_HISTORY_DAYS, captureActivity } from "../../lib/dashboard";
 import type { CaptureBatch } from "../../lib/workspace";
 
 export function ScannerResultsHeading({
@@ -41,12 +41,12 @@ export function ScannerResultsHeading({
 
 export function ScannerOverview({ batches }: { batches: CaptureBatch[] }) {
   const days = captureActivity(batches);
-  const weekCount = days.reduce((total, day) => total + day.count, 0);
+  const activityCount = days.reduce((total, day) => total + day.count, 0);
   const maxCount = Math.max(1, ...days.map((day) => day.count));
   return (
     <div className="mt-5 grid gap-4 xl:grid-cols-[1.4fr_1fr]">
       <section
-        aria-label="Capture activity over the last seven days"
+        aria-label={`Capture activity over the last ${CAPTURE_HISTORY_DAYS} days`}
         className="rounded-2xl border border-zinc-200 bg-white p-5"
       >
         <div className="flex items-start justify-between gap-4">
@@ -55,8 +55,8 @@ export function ScannerOverview({ batches }: { batches: CaptureBatch[] }) {
               Capture activity
             </h2>
             <p className="mt-1 text-xs text-zinc-500">
-              {weekCount} {weekCount === 1 ? "capture" : "captures"} over the
-              last 7 days
+              {activityCount} {activityCount === 1 ? "capture" : "captures"} over the
+              last {CAPTURE_HISTORY_DAYS} days
             </p>
           </div>
           <CalendarDays size={17} className="text-zinc-400" />

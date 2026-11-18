@@ -182,8 +182,8 @@ final class DurableCaptureOutbox {
         try save()
     }
 
-    /// History is a rolling window that matches the cloud's 7-day retention.
-    static let historyRetention: TimeInterval = 7 * 24 * 60 * 60
+    /// History is a rolling window that matches the cloud's 3-day retention.
+    static let historyRetention: TimeInterval = 3 * 24 * 60 * 60
 
     /// Drops uploaded captures past the history window and returns their ids. Anything not
     /// uploaded stays however old it is, because this phone holds the only copy.

@@ -1,4 +1,4 @@
-export const WORKSPACE_RETENTION_DAYS = 7;
+export const WORKSPACE_RETENTION_DAYS = 3;
 
 export function workspaceLifecycleEnabled() {
   return process.env.WORKSPACE_STORAGE_POLICY_ENABLED === "true";
