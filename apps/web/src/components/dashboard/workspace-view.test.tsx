@@ -34,7 +34,7 @@ describe("dashboard presentation", () => {
     expect(html).toContain("Capture history");
     expect(html).not.toContain(">Dashboard<");
     expect(html).toContain("Nothing captured yet");
-    expect(html).toContain("0 captures over the last 7 days");
+    expect(html).toContain("0 captures over the last 3 days");
     expect(html).toContain("disabled");
     expect(html).toContain("Search captures");
     expect(html).toContain("Trash");
@@ -62,7 +62,7 @@ describe("dashboard presentation", () => {
       },
     ];
     const html = renderToStaticMarkup(<ScannerOverview batches={batches} />);
-    expect(html).toContain("1 capture over the last 7 days");
+    expect(html).toContain("1 capture over the last 3 days");
     expect(html).toContain("Get the iPhone app");
   });
 });

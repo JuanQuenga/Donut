@@ -188,6 +188,10 @@ export const getUsage = query({
   },
 });
 
+const SWEEP_BATCH = 100;
+const sweepRetentionRef = makeFunctionReference<"mutation", Record<string, never>, number>(
+  "workspaceStorage:sweepRetention",
+);
 export const sweepRetention = internalMutation({
   args: {},
   returns: v.number(),
@@ -199,7 +203,7 @@ export const sweepRetention = internalMutation({
       .withIndex("by_retentionCheckAt", (q) =>
         q.gt("retentionCheckAt", 0).lte("retentionCheckAt", now),
       )
-      .take(100);
+      .take(SWEEP_BATCH);
     const policy = accountPolicy().workspace;
     let expired = 0;
     for (const result of results) {
@@ -247,6 +251,9 @@ export const sweepRetention = internalMutation({
         });
       expired++;
     }
+    // Snapshot pages rely on this sweep to hide expired captures, so a backlog must drain now,
+    // not 100 rows per cron tick. Every processed row leaves the due range, so this terminates.
+    if (results.length === SWEEP_BATCH) await ctx.scheduler.runAfter(0, sweepRetentionRef, {});
     return expired;
   },
 });

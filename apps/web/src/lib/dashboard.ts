@@ -71,10 +71,13 @@ export function visibleSections(
   return [...sections.values()];
 }
 
+/** Matches the server's rolling capture history (convex/monetization.ts WORKSPACE_RETENTION_DAYS). */
+export const CAPTURE_HISTORY_DAYS = 3;
+
 export function captureActivity(batches: CaptureBatch[], now = new Date()) {
-  const days = Array.from({ length: 7 }, (_, index) => {
+  const days = Array.from({ length: CAPTURE_HISTORY_DAYS }, (_, index) => {
     const date = new Date(now);
-    date.setDate(now.getDate() - 6 + index);
+    date.setDate(now.getDate() - (CAPTURE_HISTORY_DAYS - 1) + index);
     return {
       key: date.toDateString(),
       label: date.toLocaleDateString(undefined, { weekday: "short" }),

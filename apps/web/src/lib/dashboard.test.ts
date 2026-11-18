@@ -108,7 +108,7 @@ describe("dashboard data", () => {
       ],
       new Date("2026-09-04T15:00:00"),
     );
-    expect(activity.map((day) => day.count)).toEqual([0, 0, 0, 0, 0, 1, 1]);
+    expect(activity.map((day) => day.count)).toEqual([0, 1, 1]);
   });
 
   test("CSV quotes text and neutralizes spreadsheet formula injection", () => {

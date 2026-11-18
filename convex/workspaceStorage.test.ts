@@ -496,3 +496,25 @@ test("snapshot reads redact expired payloads once the sweep runs; batch reads re
   });
   expect(snapshot?.batches[0].results[0]).not.toHaveProperty("value");
 });
+
+test("a retention backlog drains in one scheduled chain instead of 100 rows per cron tick", async () => {
+  const t = convexTest(schema, modules);
+  const { signedIn, credential } = await owner(t);
+  await capture(t, credential, "seed");
+  await t.run(async (ctx) => {
+    const seed = await ctx.db.query("scanResults").unique();
+    if (!seed) throw new Error("Expected the seed capture");
+    const { _id, _creationTime, ...row } = seed;
+    for (let index = 0; index < 249; index++) {
+      await ctx.db.insert("scanResults", { ...row, resultId: `backlog-${index}` });
+    }
+  });
+  vi.setSystemTime(Date.now() + 4 * DAY);
+  expect(await t.mutation(sweep, {})).toBe(100);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  const rows = await t.run((ctx) => ctx.db.query("scanResults").collect());
+  expect(rows).toHaveLength(250);
+  expect(rows.every((row) => row.deletedAt !== undefined)).toBe(true);
+  const page = await signedIn.query(api.cloudWorkspace.workspaceSnapshotPage, { kind: "results", cursor: null });
+  expect(page?.kind === "results" && page.items.every((item) => item.deliveryState === "deleted" && !("value" in item))).toBe(true);
+});
