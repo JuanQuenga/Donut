@@ -99,10 +99,10 @@ const groups: Group[] = [
     features: [
       {
         icon: Zap,
-        name: "Capture, 7-day history, and sync",
+        name: "Capture, 3-day history, and sync",
         talksTo: ["Donut account", "Clerk sign-in"],
         detail:
-          "Barcode and text recognition run on the iPhone. Synced captures go to your Donut workspace and clear after 7 days.",
+          "Barcode and text recognition run on the iPhone. Synced captures go to your Donut workspace and clear after 3 days.",
       },
       {
         icon: Smartphone,

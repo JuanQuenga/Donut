@@ -1,6 +1,6 @@
 # Authentication and access
 
-Donut uses Clerk for identity and Convex for authorization, cloud-workspace metadata, cursor delivery, and live dictation drafts. Cloudflare R2 holds private photo bytes. Every signed-in account gets every feature: local iPhone scanning, history, the cloud workspace, and mobile capture sync, with a rolling seven-day capture history. See [workspace storage](workspace-storage.md) for retention, quotas, and cleanup. The App Clip uses a short-lived workspace guest grant created by signed-in Chrome.
+Donut uses Clerk for identity and Convex for authorization, cloud-workspace metadata, cursor delivery, and live dictation drafts. Cloudflare R2 holds private photo bytes. Every signed-in account gets every feature: local iPhone scanning, history, the cloud workspace, and mobile capture sync, with a rolling three-day capture history. See [workspace storage](workspace-storage.md) for retention, quotas, and cleanup. The App Clip uses a short-lived workspace guest grant created by signed-in Chrome.
 
 ## Clerk and Convex
 

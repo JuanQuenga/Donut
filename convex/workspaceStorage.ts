@@ -252,7 +252,29 @@ export const sweepRetention = internalMutation({
 });
 
 /**
- * One-time move of captures saved before retention was enabled onto the 7-day window. It only
+ * Makes every live managed capture due for sweepRetention now, so a shorter retention window
+ * applies immediately instead of at each row's next daily check. It only reschedules rows;
+ * sweepRetention and purgeExpiredObjects still do all the deleting.
+ */
+export const recheckRetentionNow = internalMutation({
+  args: { cursor: v.union(v.string(), v.null()) },
+  returns: v.object({ cursor: v.string(), isDone: v.boolean(), rescheduled: v.number() }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const page = await ctx.db.query("scanResults").paginate({ cursor: args.cursor, numItems: 200 });
+    let rescheduled = 0;
+    for (const result of page.page) {
+      if (!result.storageManaged || result.deletedAt !== undefined) continue;
+      if (result.retentionCheckAt !== undefined && result.retentionCheckAt <= now) continue;
+      await ctx.db.patch(result._id, { retentionCheckAt: now });
+      rescheduled++;
+    }
+    return { cursor: page.continueCursor, isDone: page.isDone, rescheduled };
+  },
+});
+
+/**
+ * One-time move of captures saved before retention was enabled onto the retention window. It only
  * marks rows; sweepRetention and purgeExpiredObjects still do all the deleting. Those rows never
  * reserved usage, so run recountWorkspaceStorage afterwards to make the counters match.
  */
@@ -282,9 +304,10 @@ export const enrollLegacyHistory = internalMutation({
     let pastWindow = 0;
     let photos = 0;
     let userDeleted = 0;
+    const { retentionDays } = accountPolicy().workspace;
     for (const result of page.page) {
       if (result.storageManaged || result.objectPurgedAt !== undefined) continue;
-      const deadline = result.createdAt + 7 * DAY;
+      const deadline = result.createdAt + retentionDays * DAY;
       enrolled++;
       if (deadline <= now) pastWindow++;
       if (result.objectKey) photos++;

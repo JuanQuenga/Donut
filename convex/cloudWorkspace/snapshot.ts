@@ -1,8 +1,6 @@
 import { ConvexError, v, type ObjectType } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
-import { retentionDeadline } from "../workspaceStorage";
-import { accountPolicy } from "../monetization";
 import { authenticatedWorkspaceOrNull } from "./identity";
 import { mergeWorkspaceSnapshotPages, type WorkspaceSnapshotPage } from "@volt/scanner-protocol";
 
@@ -41,19 +39,15 @@ function snapshotBatch(row: Doc<"resultBatches">) {
   return { id: row.batchId, createdAt: new Date(row.clientCreatedAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString(),
     deliveryState: row.status === "ready" ? "available" as const : row.status };
 }
-type Retention = { policy: ReturnType<typeof accountPolicy>["workspace"]; now: number } | null;
 /**
- * Only storage-managed rows can expire, so pages without them skip the clock read.
- * Reading the clock shortens query-cache reuse, making auth refreshes re-read each page.
+ * Results pages never read the clock: a query that calls Date.now() can't be served from
+ * Convex's query cache, so every client auth refresh (~50s per open extension) re-read every
+ * page. Since rolling retention marked all history storage-managed, that was most of the
+ * project's Database I/O. workspaceStorage:sweepRetention (every 5 minutes) sets deletedAt on expired
+ * captures, and that write is what updates subscribed clients.
  */
-function retentionFor(rows: Array<Doc<"scanResults">>): Retention {
-  if (!rows.some(row => row.storageManaged)) return null;
-  const now = Date.now();
-  return { policy: accountPolicy().workspace, now };
-}
-function snapshotResult(row: Doc<"scanResults">, retention: Retention) {
-  const deadline = retention ? retentionDeadline(row, retention.policy) : null;
-  const deleted = row.deletedAt !== undefined || (retention !== null && deadline !== null && deadline <= retention.now);
+function snapshotResult(row: Doc<"scanResults">) {
+  const deleted = row.deletedAt !== undefined;
   return { batchId: row.batchId, id: row.resultId, type: row.kind,
     deliveryState: !deleted ? "available" as const : "deleted" as const,
     ...(!deleted && row.text !== undefined ? { value: row.text } : {}), ...(!deleted && row.format !== undefined ? { format: row.format } : {}),
@@ -92,8 +86,7 @@ export async function workspaceSnapshotPageHandler(ctx: QueryCtx, args: ObjectTy
     response = { ...withBoundary(page), kind: "batches", items: page.page.map(snapshotBatch) };
   } else if (args.kind === "results") {
     const page = await ctx.db.query("scanResults").withIndex("by_workspaceId", q => q.eq("workspaceId", workspace._id)).order("desc").paginate(options);
-    const retention = retentionFor(page.page);
-    response = { ...withBoundary(page), kind: "results", items: page.page.map(row => snapshotResult(row, retention)) };
+    response = { ...withBoundary(page), kind: "results", items: page.page.map(snapshotResult) };
   } else {
     const page = await ctx.db.query("resultDeliveries").withIndex("by_workspaceId", q => q.eq("workspaceId", workspace._id)).order("desc").paginate(options);
     response = { ...withBoundary(page), kind: "deliveries", items: page.page.map(snapshotDelivery) };
@@ -125,10 +118,9 @@ export async function workspaceSnapshotHandler(ctx: QueryCtx) {
   const results = await bounded(ctx.db.query("scanResults").withIndex("by_workspaceId", q => q.eq("workspaceId", workspace._id)).order("desc"));
   const deliveries = await bounded(ctx.db.query("resultDeliveries").withIndex("by_workspaceId", q => q.eq("workspaceId", workspace._id)).order("desc"));
   const meta = { workspaceId: workspace._id, revision: workspace.updatedAt, continueCursor: "", isDone: true };
-  const retention = retentionFor(results);
   return mergeWorkspaceSnapshotPages([
     { ...meta, kind: "batches", items: batches.map(snapshotBatch) },
-    { ...meta, kind: "results", items: results.map(row => snapshotResult(row, retention)) },
+    { ...meta, kind: "results", items: results.map(snapshotResult) },
     { ...meta, kind: "deliveries", items: deliveries.map(snapshotDelivery) },
   ]);
 }

@@ -6,7 +6,7 @@ import schema from "./schema";
 import { modules } from "./cloudWorkspace.testSupport";
 import { SNAPSHOT_PAGE_DOCUMENTS, SNAPSHOT_PAGE_READ_BYTES } from "./cloudWorkspace/snapshot";
 
-async function seed(count: number, text = "value") {
+async function seed(count: number, text = "value", storageManaged = false) {
   const t = convexTest(schema, modules);
   const user = t.withIdentity({ subject: "alice" });
   await t.run(async (ctx) => {
@@ -17,6 +17,7 @@ async function seed(count: number, text = "value") {
         status: "ready", resultCount: 1, byteCount: text.length, createdAt: index, updatedAt: index + 1 });
       await ctx.db.insert("scanResults", { workspaceId, batchId, resultId: `result-${index}`, sourceDeviceId: "device",
         kind: "text", text, byteCount: text.length, clientCreatedAt: index, createdAt: index,
+        ...(storageManaged ? { storageManaged: true, retentionTier: "free" as const, expiresAt: index + 1 } : {}),
         ...(index % 2 === 0 ? { deletedAt: index + 1 } : {}) });
       await ctx.db.insert("resultDeliveries", { workspaceId, batchId, targetDeviceId: "computer", state: "delivered", attempts: 1, updatedAt: index });
     }
@@ -63,8 +64,10 @@ describe("bounded complete workspace snapshots", () => {
     )).toBe(true);
   });
 
-  test("pages without storage-managed results never read the clock, so Convex can cache them", async () => {
-    const { user } = await seed(5);
+  test.each([false, true])("results pages never read the clock (storage-managed: %s), so Convex can cache them", async (storageManaged) => {
+    // Retention-managed rows used to make every results page call Date.now(), which kept Convex
+    // from caching the page and re-read it on every auth refresh. Expiry is the sweep's job.
+    const { user } = await seed(5, "value", storageManaged);
     await user.query(api.cloudWorkspace.workspaceSnapshotPage, { kind: "results", cursor: null });
     const clock = vi.spyOn(Date, "now");
     try {
